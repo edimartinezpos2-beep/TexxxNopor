@@ -4,7 +4,7 @@
   "description": "Backend streaming infrastructure & RBAC API for TexxxNopor platform",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "prisma:generate": "prisma generate",
@@ -25,8 +25,10 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
     "nodemailer": "^9.0.5",
+    "prisma": "^5.10.0",
     "redis": "^4.6.13",
     "socket.io": "^4.7.4",
+    "typescript": "^5.3.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -38,8 +40,6 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^20.11.20",
     "@types/nodemailer": "^8.0.1",
-    "prisma": "^5.10.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "ts-node-dev": "^2.0.0"
   }
 }

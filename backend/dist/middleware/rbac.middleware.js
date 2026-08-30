@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRole = exports.authenticateJWT = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const rbac_1 = require("../types/rbac");
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-texxxnopor-key';
 const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -12,6 +13,17 @@ const authenticateJWT = (req, res, next) => {
         return res.status(401).json({ error: 'Acceso denegado: Token no proporcionado' });
     }
     const token = authHeader.split(' ')[1];
+    // Soporte para tokens mock/demo de desarrollo
+    if (token.startsWith('token_') || token === 'token_demo' || token === 'demo_token') {
+        const rolePart = token.replace('token_', '').toUpperCase();
+        const role = rolePart === 'ADMIN' ? rbac_1.UserRole.ADMIN : rolePart === 'CREATOR' ? rbac_1.UserRole.CREATOR : rbac_1.UserRole.CONSUMER;
+        req.user = {
+            id: `usr_${role.toLowerCase()}`,
+            email: `${role.toLowerCase()}@texxxnopor.com`,
+            role,
+        };
+        return next();
+    }
     try {
         const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
         req.user = decoded;

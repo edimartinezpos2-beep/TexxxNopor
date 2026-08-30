@@ -3,16 +3,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CloudinaryService = exports.UPLOAD_TIMEOUT_MS = exports.MAX_IMAGE_SIZE_BYTES = exports.MAX_VIDEO_SIZE_BYTES = exports.ALLOWED_IMAGE_MIMES = exports.ALLOWED_VIDEO_MIMES = void 0;
+exports.CloudinaryService = exports.UPLOAD_TIMEOUT_MS = exports.MAX_IMAGE_SIZE_BYTES = exports.MAX_VIDEO_SIZE_BYTES = exports.ALLOWED_IMAGE_MIMES = exports.ALLOWED_VIDEO_MIMES = exports.configureCloudinary = void 0;
 const cloudinary_1 = require("cloudinary");
 const path_1 = __importDefault(require("path"));
-// Configuración de Cloudinary a través de variables de entorno o defaults
-cloudinary_1.v2.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'texxxnopor-media',
-    api_key: process.env.CLOUDINARY_API_KEY || '829471928374912',
-    api_secret: process.env.CLOUDINARY_API_SECRET || 'TexxxSecretCloudinaryKey2026',
-    secure: true,
-});
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+// Configuración de Cloudinary
+const configureCloudinary = () => {
+    cloudinary_1.v2.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dkbtx7spx',
+        api_key: process.env.CLOUDINARY_API_KEY || '227527165282245',
+        api_secret: process.env.CLOUDINARY_API_SECRET || 'N73353FISiwDEUgm-BO8ZXXYE30',
+        secure: true,
+    });
+};
+exports.configureCloudinary = configureCloudinary;
+(0, exports.configureCloudinary)();
 // Extensiones y tipos MIME permitidos
 exports.ALLOWED_VIDEO_MIMES = [
     'video/mp4',
@@ -21,6 +27,13 @@ exports.ALLOWED_VIDEO_MIMES = [
     'video/x-m4v',
     'video/mkv',
     'video/x-matroska',
+    'video/3gpp',
+    'video/3gp',
+    'video/avi',
+    'video/x-msvideo',
+    'video/mpeg',
+    'video/ogg',
+    'application/octet-stream',
 ];
 exports.ALLOWED_IMAGE_MIMES = [
     'image/jpeg',
@@ -28,19 +41,22 @@ exports.ALLOWED_IMAGE_MIMES = [
     'image/webp',
     'image/gif',
     'image/jpg',
+    'application/octet-stream',
 ];
-exports.MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
-exports.MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-exports.UPLOAD_TIMEOUT_MS = 60000; // 60 segundos timeout
+exports.MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB (1024MB)
+exports.MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+exports.UPLOAD_TIMEOUT_MS = 900000; // 15 minutos timeout (videos de larga duración)
 class CloudinaryService {
     /**
      * Valida un archivo de video antes de subirlo
      */
     static validateVideoFile(mimetype, sizeBytes) {
-        if (!exports.ALLOWED_VIDEO_MIMES.includes(mimetype.toLowerCase())) {
+        const isVideoMime = mimetype.toLowerCase().startsWith('video/') ||
+            exports.ALLOWED_VIDEO_MIMES.includes(mimetype.toLowerCase());
+        if (!isVideoMime) {
             return {
                 valid: false,
-                error: `Formato no soportado (${mimetype}). Formatos válidos: MP4, MOV, WEBM, M4V.`,
+                error: `Formato de video no soportado (${mimetype}). Formatos válidos: MP4, MOV, WEBM, MKV, 3GP.`,
             };
         }
         if (sizeBytes > exports.MAX_VIDEO_SIZE_BYTES) {
@@ -55,7 +71,9 @@ class CloudinaryService {
      * Valida una imagen antes de subirla
      */
     static validateImageFile(mimetype, sizeBytes) {
-        if (!exports.ALLOWED_IMAGE_MIMES.includes(mimetype.toLowerCase())) {
+        const isImageMime = mimetype.toLowerCase().startsWith('image/') ||
+            exports.ALLOWED_IMAGE_MIMES.includes(mimetype.toLowerCase());
+        if (!isImageMime) {
             return {
                 valid: false,
                 error: `Formato de imagen no soportado (${mimetype}). Formatos válidos: JPG, PNG, WEBP.`,
@@ -73,30 +91,24 @@ class CloudinaryService {
      * Sube un buffer de video a Cloudinary con timeout y retorno de secure_url y public_id
      */
     static async uploadVideoBuffer(buffer, filename, folder = 'texxxnopor/videos') {
+        (0, exports.configureCloudinary)();
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(`Tiempo de espera agotado (${exports.UPLOAD_TIMEOUT_MS / 1000}s) durante la subida a Cloudinary.`));
             }, exports.UPLOAD_TIMEOUT_MS);
+            const cleanFilename = path_1.default.parse(filename).name.replace(/[^a-zA-Z0-9_-]/g, '') || 'video';
             const uploadStream = cloudinary_1.v2.uploader.upload_stream({
-                resource_type: 'video',
+                resource_type: 'auto',
                 folder,
-                public_id: `vid_${Date.now()}_${path_1.default.parse(filename).name.replace(/[^a-zA-Z0-9_-]/g, '')}`,
-                chunk_size: 6000000,
+                public_id: `vid_${Date.now()}_${cleanFilename}`,
+                chunk_size: 6000000, // 6MB por chunk
             }, (error, result) => {
                 clearTimeout(timer);
                 if (error || !result) {
-                    // Fallback simulado si las credenciales son de desarrollo local offline
-                    console.warn('⚠️ Cloudinary SDK warning / local fallback:', error?.message);
-                    const mockPublicId = `texxx_cld_vid_${Date.now()}`;
-                    return resolve({
-                        secure_url: `https://res.cloudinary.com/texxxnopor/video/upload/v1/${folder}/${mockPublicId}.mp4`,
-                        public_id: mockPublicId,
-                        resource_type: 'video',
-                        format: 'mp4',
-                        bytes: buffer.length,
-                        duration: 180,
-                    });
+                    console.error('❌ [Cloudinary] Error al subir video:', error?.http_code, error?.message);
+                    return reject(new Error(error?.message || 'Error desconocido al subir video a Cloudinary'));
                 }
+                console.log(`✅ [Cloudinary] Video subido: ${result.secure_url} (${result.bytes} bytes)`);
                 resolve({
                     secure_url: result.secure_url,
                     public_id: result.public_id,
@@ -115,6 +127,7 @@ class CloudinaryService {
      * Sube una imagen a Cloudinary (foto de actor o thumbnail)
      */
     static async uploadImageBuffer(buffer, filename, folder = 'texxxnopor/images') {
+        (0, exports.configureCloudinary)();
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(`Tiempo de espera agotado (${exports.UPLOAD_TIMEOUT_MS / 1000}s) al subir imagen.`));
@@ -153,6 +166,7 @@ class CloudinaryService {
      * Elimina un recurso de Cloudinary mediante su public_id
      */
     static async deleteAsset(publicId, resourceType = 'video') {
+        (0, exports.configureCloudinary)();
         try {
             const result = await cloudinary_1.v2.uploader.destroy(publicId, { resource_type: resourceType });
             return result.result === 'ok' || result.result === 'not found';
