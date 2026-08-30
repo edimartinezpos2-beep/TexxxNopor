@@ -19,16 +19,9 @@ export interface SubscriptionItem {
   isFollowed: boolean;
 }
 
-// Detección dinámica de IP del servidor backend (para emuladores, web y celular físico)
+// URL de producción alojada en la nube de Render (24/7 con PC apagado)
 const getApiBaseUrl = (): string => {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-      return `http://${window.location.hostname}:4000`;
-    }
-    return 'http://localhost:4000';
-  }
-  // En dispositivo móvil físico o Expo Go en la misma red Wi-Fi:
-  return 'http://192.168.20.25:4000';
+  return 'https://texxxnopor-backend.onrender.com';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
