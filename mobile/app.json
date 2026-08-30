@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "TexxxNopor",
+    "slug": "texxxnopor-mobile",
+    "scheme": "texxxnopor",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.texxxnopor.mobile"
+    },
+    "android": {
+      "package": "com.texxxnopor.mobile",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e44c541a-3a7a-4b84-92ac-67f212ef48b3"
+      }
+    }
+  }
+}
