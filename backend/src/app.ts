@@ -5,6 +5,9 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { exec } from 'child_process';
+import util from 'util';
+const execAsync = util.promisify(exec);
 import { authenticateJWT, requireRole } from './middleware/rbac.middleware';
 import { UserRole, Actor, VideoModel } from './types/rbac';
 import {
@@ -240,6 +243,24 @@ app.get('/health', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Error de conexión a PostgreSQL', details: error.message });
+  }
+});
+
+// Endpoint para forzar o verificar la sincronización de las tablas de PostgreSQL
+app.all(['/api/admin/db-init', '/api/db-init'], async (req: Request, res: Response) => {
+  try {
+    console.log('🔄 Ejecutando sincronización de base de datos PostgreSQL...');
+    const { stdout, stderr } = await execAsync('npx prisma db push --skip-generate --accept-data-loss', {
+      cwd: path.join(__dirname, '..'),
+    });
+    return res.json({
+      status: 'ok',
+      message: 'Tablas de PostgreSQL sincronizadas correctamente con Prisma.',
+      details: stdout || stderr,
+    });
+  } catch (err: any) {
+    console.error('❌ Error en db-init:', err);
+    return res.status(500).json({ error: 'Error al sincronizar tablas', details: err.message });
   }
 });
 
@@ -3303,15 +3324,30 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   return res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
 });
 
+async function autoSyncDatabase() {
+  try {
+    console.log('🔄 Sincronizando esquema de base de datos PostgreSQL con Prisma...');
+    const { stdout } = await execAsync('npx prisma db push --skip-generate --accept-data-loss', {
+      cwd: path.join(__dirname, '..'),
+    });
+    console.log('✅ Esquema PostgreSQL sincronizado con éxito:\n', stdout);
+  } catch (err: any) {
+    console.warn('⚠️ Nota sobre sincronización de base de datos:', err.message);
+  }
+}
+
 // Escuchar en todas las interfaces de red (0.0.0.0) para permitir acceso desde celulares en la LAN
 if (require.main === module) {
-  app.listen(Number(PORT), '0.0.0.0', () => {
+  app.listen(Number(PORT), '0.0.0.0', async () => {
     console.log(`🚀 TexxxNopor API running on port ${PORT}`);
     console.log(`📡 Local: http://localhost:${PORT}`);
     console.log(`📱 LAN / Mobile: http://192.168.20.25:${PORT}`);
     console.log(`🐘 PostgreSQL + Prisma database connected`);
     console.log(`☁️ Cloudinary Video & Image upload service active`);
     console.log(`🛡️ RBAC: First user gets ADMIN role automatically`);
+
+    // Sincronización automática de tablas en Render / PostgreSQL
+    await autoSyncDatabase();
   });
 }
 

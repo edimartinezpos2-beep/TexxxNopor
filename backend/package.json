@@ -4,8 +4,8 @@
   "description": "Backend streaming infrastructure & RBAC API for TexxxNopor platform",
   "main": "dist/app.js",
   "scripts": {
-    "build": "prisma generate && prisma db push && tsc",
-    "start": "node dist/app.js",
+    "build": "prisma generate && tsc",
+    "start": "npx prisma db push --skip-generate --accept-data-loss && node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

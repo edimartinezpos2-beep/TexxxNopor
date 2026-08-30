@@ -11,6 +11,9 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const child_process_1 = require("child_process");
+const util_1 = __importDefault(require("util"));
+const execAsync = util_1.default.promisify(child_process_1.exec);
 const rbac_middleware_1 = require("./middleware/rbac.middleware");
 const rbac_1 = require("./types/rbac");
 const bunny_service_1 = require("./services/bunny.service");
@@ -212,6 +215,24 @@ app.get('/health', async (req, res) => {
     }
     catch (error) {
         res.status(500).json({ error: 'Error de conexión a PostgreSQL', details: error.message });
+    }
+});
+// Endpoint para forzar o verificar la sincronización de las tablas de PostgreSQL
+app.all(['/api/admin/db-init', '/api/db-init'], async (req, res) => {
+    try {
+        console.log('🔄 Ejecutando sincronización de base de datos PostgreSQL...');
+        const { stdout, stderr } = await execAsync('npx prisma db push --skip-generate --accept-data-loss', {
+            cwd: path_1.default.join(__dirname, '..'),
+        });
+        return res.json({
+            status: 'ok',
+            message: 'Tablas de PostgreSQL sincronizadas correctamente con Prisma.',
+            details: stdout || stderr,
+        });
+    }
+    catch (err) {
+        console.error('❌ Error en db-init:', err);
+        return res.status(500).json({ error: 'Error al sincronizar tablas', details: err.message });
     }
 });
 // ====================================================
@@ -2816,14 +2837,28 @@ app.use((err, req, res, next) => {
     console.error('Unhandled server error:', err);
     return res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
 });
+async function autoSyncDatabase() {
+    try {
+        console.log('🔄 Sincronizando esquema de base de datos PostgreSQL con Prisma...');
+        const { stdout } = await execAsync('npx prisma db push --skip-generate --accept-data-loss', {
+            cwd: path_1.default.join(__dirname, '..'),
+        });
+        console.log('✅ Esquema PostgreSQL sincronizado con éxito:\n', stdout);
+    }
+    catch (err) {
+        console.warn('⚠️ Nota sobre sincronización de base de datos:', err.message);
+    }
+}
 // Escuchar en todas las interfaces de red (0.0.0.0) para permitir acceso desde celulares en la LAN
 if (require.main === module) {
-    app.listen(Number(PORT), '0.0.0.0', () => {
+    app.listen(Number(PORT), '0.0.0.0', async () => {
         console.log(`🚀 TexxxNopor API running on port ${PORT}`);
         console.log(`📡 Local: http://localhost:${PORT}`);
         console.log(`📱 LAN / Mobile: http://192.168.20.25:${PORT}`);
         console.log(`🐘 PostgreSQL + Prisma database connected`);
         console.log(`☁️ Cloudinary Video & Image upload service active`);
         console.log(`🛡️ RBAC: First user gets ADMIN role automatically`);
+        // Sincronización automática de tablas en Render / PostgreSQL
+        await autoSyncDatabase();
     });
 }

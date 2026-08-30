@@ -37,17 +37,18 @@ let localFavorites: string[] = [];
 let localHistory: any[] = [];
 let localSubscriptions: string[] = [];
 
-// Helper para llamadas con fetch y timeout (usa console.log para evitar advertencias intrusivas en LogBox)
-async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+// Helper para llamadas con fetch y timeout (soporta throwOnError para mensajes de error claros)
+async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnError?: boolean } = {}): Promise<T | null> {
+  const { throwOnError = false, ...fetchOptions } = options;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers,
+        ...fetchOptions.headers,
       },
       signal: controller.signal,
     });
@@ -55,14 +56,19 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
-      if (errJson && errJson.error) {
-        console.log(`[API ${res.status}] ${endpoint}:`, errJson.error);
+      const errMsg = errJson?.error || errJson?.details || `Error en el servidor (${res.status})`;
+      console.log(`[API ${res.status}] ${endpoint}:`, errMsg);
+      if (throwOnError) {
+        throw new Error(errMsg);
       }
       return null;
     }
     return await res.json();
   } catch (err: any) {
     console.log(`[Network Status] ${API_BASE_URL}${endpoint}:`, err.message);
+    if (throwOnError) {
+      throw new Error(err.message || 'Error de conexión con el servidor.');
+    }
     return null;
   }
 }
@@ -90,6 +96,7 @@ export const api = {
       const res = await apiFetch<{ token: string; user: UserProfile }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
+        throwOnError: true,
       });
 
       if (res) return res;
@@ -107,12 +114,13 @@ export const api = {
       const res = await apiFetch<{ token: string; user: UserProfile; message?: string }>('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({ email, username, password, age, isOver18, requestedRole }),
+        throwOnError: true,
       });
 
       if (res) {
         return res;
       }
-      throw new Error('No se pudo completar el registro en el servidor. Verifica tu conexión.');
+      throw new Error('No se pudo completar el registro en el servidor.');
     },
 
     async socialLogin(
@@ -139,6 +147,7 @@ export const api = {
           idToken,
           accessToken,
         }),
+        throwOnError: true,
       });
 
       if (res) return res;
@@ -150,6 +159,7 @@ export const api = {
       return await apiFetch<{ status: string; message: string; code?: string }>('/api/auth/forgot-password', {
         method: 'POST',
         body: JSON.stringify({ email }),
+        throwOnError: true,
       });
     },
 
@@ -157,6 +167,7 @@ export const api = {
       return await apiFetch<{ status: string; message?: string }>('/api/auth/verify-reset-code', {
         method: 'POST',
         body: JSON.stringify({ email, code }),
+        throwOnError: true,
       });
     },
 
@@ -168,6 +179,7 @@ export const api = {
       return await apiFetch<{ status: string; message: string }>('/api/auth/reset-password', {
         method: 'POST',
         body: JSON.stringify({ email, code, newPassword }),
+        throwOnError: true,
       });
     },
   },
