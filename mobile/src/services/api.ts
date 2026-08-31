@@ -37,12 +37,12 @@ let localFavorites: string[] = [];
 let localHistory: any[] = [];
 let localSubscriptions: string[] = [];
 
-// Helper para llamadas con fetch y timeout (soporta throwOnError para mensajes de error claros)
-async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnError?: boolean } = {}): Promise<T | null> {
-  const { throwOnError = false, ...fetchOptions } = options;
+// Helper para llamadas con fetch y timeout extendido a 60s (soporta cold-start de Render y throwOnError)
+async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnError?: boolean; timeoutMs?: number } = {}): Promise<T | null> {
+  const { throwOnError = false, timeoutMs = 60000, ...fetchOptions } = options;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...fetchOptions,
@@ -65,8 +65,11 @@ async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnErr
     }
     return await res.json();
   } catch (err: any) {
-    console.log(`[Network Status] ${API_BASE_URL}${endpoint}:`, err.message);
+    console.log(`[Network Status] ${API_BASE_URL}${endpoint}:`, err.name, err.message);
     if (throwOnError) {
+      if (err.name === 'AbortError') {
+        throw new Error('El servidor en la nube está despertando de reposo. Por favor espera unos segundos e intenta de nuevo.');
+      }
       throw new Error(err.message || 'Error de conexión con el servidor.');
     }
     return null;
@@ -281,7 +284,18 @@ export const api = {
 
     async subscribePremium(
       token: string,
-      data: { plan: string; paymentMethod: string; amount: number }
+      data: {
+        plan: string;
+        paymentMethod: string;
+        amount: number;
+        currency?: string;
+        bankName?: string;
+        psePersonType?: string;
+        documentType?: string;
+        documentNumber?: string;
+        phoneNumber?: string;
+        customerEmail?: string;
+      }
     ): Promise<{ status: string; message: string; user?: UserProfile; transaction?: any } | null> {
       return await apiFetch<{ status: string; message: string; user?: UserProfile; transaction?: any }>(
         '/api/user/subscribe-premium',
@@ -289,6 +303,7 @@ export const api = {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: JSON.stringify(data),
+          throwOnError: true,
         }
       );
     },
@@ -1025,6 +1040,95 @@ export const api = {
         }
       );
       return res ? true : false;
+    },
+  },
+
+  // ====================================================
+  // 10. ESTADO Y DIAGNÓSTICO DEL SISTEMA
+  // ====================================================
+  system: {
+    async pingBackend(): Promise<boolean> {
+      try {
+        const res = await apiFetch<{ totalUsers?: number; hasAdmin?: boolean }>('/api/auth/bootstrap-status', {
+          timeoutMs: 60000,
+        });
+        return res !== null;
+      } catch {
+        return false;
+      }
+    },
+
+    async checkVersion(
+      version: string = '1.0.2',
+      platform: string = 'android'
+    ): Promise<{
+      isOutdated: boolean;
+      forceUpdate: boolean;
+      latestVersion: string;
+      minSupportedVersion: string;
+      title: string;
+      message: string;
+      updateUrl: string;
+      releaseNotes?: string[];
+    } | null> {
+      try {
+        return await apiFetch<{
+          isOutdated: boolean;
+          forceUpdate: boolean;
+          latestVersion: string;
+          minSupportedVersion: string;
+          title: string;
+          message: string;
+          updateUrl: string;
+          releaseNotes?: string[];
+        }>(`/api/app/version-check?version=${version}&platform=${platform}`, {
+          timeoutMs: 25000,
+        });
+      } catch {
+        return null;
+      }
+    },
+  },
+
+  // ====================================================
+  // 11. PASARELA DE PAGOS REAL WOMPI (BANCOLOMBIA)
+  // ====================================================
+  wompi: {
+    async getBanks(): Promise<{ financial_institution_code: string; financial_institution_name: string }[]> {
+      const res = await apiFetch<{ banks: { financial_institution_code: string; financial_institution_name: string }[] }>(
+        '/api/wompi/banks'
+      );
+      return res?.banks || [];
+    },
+
+    async createTransaction(
+      token: string,
+      data: {
+        amount: number;
+        plan: string;
+        paymentMethodType: 'PSE' | 'NEQUI' | 'CARD';
+        bankCode?: string;
+        personType?: 'NATURAL' | 'JURIDICA';
+        documentType?: string;
+        documentNumber?: string;
+        phoneNumber?: string;
+        cardToken?: string;
+        customerEmail?: string;
+        customerName?: string;
+      }
+    ): Promise<{ status: string; transaction: any } | null> {
+      return await apiFetch<{ status: string; transaction: any }>('/api/wompi/create-transaction', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+        throwOnError: true,
+      });
+    },
+
+    async getStatus(token: string, transactionId: string): Promise<{ status: string; transaction?: any } | null> {
+      return await apiFetch<{ status: string; transaction?: any }>(`/api/wompi/status/${transactionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
     },
   },
 };

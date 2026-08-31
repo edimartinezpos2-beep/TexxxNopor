@@ -318,11 +318,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </View>
         )}
 
-        {/* Mensaje de Error */}
+        {/* Mensaje de Error con Atajos Inteligentes */}
         {errorMessage ? (
           <View style={styles.errorBox}>
             <AlertTriangle size={16} color="#FF3B30" />
-            <Text style={styles.errorText}>{errorMessage}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+              {errorMessage.toLowerCase().includes('existe') && (
+                <TouchableOpacity
+                  style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center' }}
+                  onPress={() => {
+                    setAuthMode('LOGIN');
+                    setErrorMessage('');
+                  }}
+                >
+                  <Text style={{ color: COLORS.neonLime, fontWeight: 'bold', fontSize: 12 }}>
+                    👉 Toca aquí para Iniciar Sesión
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         ) : null}
 

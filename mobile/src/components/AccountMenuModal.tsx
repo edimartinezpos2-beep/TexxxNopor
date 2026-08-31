@@ -614,6 +614,12 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
                 <LogOut size={18} color="#FF3B30" style={{ marginRight: 8 }} />
                 <Text style={styles.logoutRowText}>Cerrar Sesión</Text>
               </TouchableOpacity>
+
+              {/* Pie de Versión de la Aplicación */}
+              <View style={styles.versionFooter}>
+                <Text style={styles.versionFooterText}>TexxxNopor Mobile v1.0.2 (Build 2)</Text>
+                <Text style={styles.versionFooterSubText}>Plataforma Oficial · Producción 2026</Text>
+              </View>
             </ScrollView>
           )}
 
@@ -1215,6 +1221,23 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  versionFooter: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 2,
+  },
+  versionFooterText: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  versionFooterSubText: {
+    color: '#55555C',
+    fontSize: 10,
   },
   // Estilos de Sub-Vistas
   subViewTitle: {
