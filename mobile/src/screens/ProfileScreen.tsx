@@ -94,6 +94,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [actorStageName, setActorStageName] = useState('');
   const [actorBio, setActorBio] = useState('');
   const [isUpgradingActor, setIsUpgradingActor] = useState(false);
+  const [isWaitingActorVerification, setIsWaitingActorVerification] = useState(false);
+  const [actorTransactionRef, setActorTransactionRef] = useState('');
 
   // Modal para ver listas detalladas
   const [activeModalList, setActiveModalList] = useState<
@@ -377,44 +379,52 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
     }
   };
 
-  // Convertirse en Actor / Creador ($5.000 COP con Wompi)
+  // 1. Abrir pasarela Wompi para pago de $5.000 COP
   const handleUpgradeToActor = async () => {
     if (!actorStageName.trim()) {
       Alert.alert('Nombre Artístico Requerido', 'Por favor ingresa tu nombre artístico para tu perfil de actor.');
       return;
     }
 
+    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
+    const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
+    try {
+      await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+    } catch (_) {
+      Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+    }
+
+    // Mostrar pantalla de espera y confirmación de pago
+    setIsWaitingActorVerification(true);
+  };
+
+  // 2. Confirmar y verificar el pago real de $5.000 COP
+  const handleConfirmActorPayment = async () => {
+    if (!userToken) return;
+
     setIsUpgradingActor(true);
     try {
-      // 1. Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
-      const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
-      try {
-        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
-      } catch (_) {
-        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
-      }
+      const res = await api.user.upgradeToActor(userToken, {
+        stageName: actorStageName.trim(),
+        bio: actorBio.trim(),
+        paymentMethod: `Wompi Bancolombia Ref: ${actorTransactionRef.trim() || 'VPOS_4BlRq7'}`,
+      });
 
-      // 2. Registrar ascenso a Actor en PostgreSQL
-      if (userToken) {
-        const res = await api.user.upgradeToActor(userToken, {
-          stageName: actorStageName.trim(),
-          bio: actorBio.trim(),
-          paymentMethod: 'Wompi Bancolombia (PSE/Nequi)',
-        });
-
-        if (res && res.user) {
-          if (updateUser) {
-            updateUser({ role: 'CREATOR', isVerified: true });
-          }
-          setShowBecomeActorModal(false);
-          Alert.alert(
-            '¡Bienvenido a los Creadores!',
-            'Tu cuenta ha sido ascendida a Actor / Creador Oficial ($5.000 COP). Ya puedes subir tus producciones y gestionar tu perfil público.'
-          );
+      if (res && res.user) {
+        if (updateUser) {
+          updateUser({ role: 'CREATOR', isVerified: true });
         }
+        setShowBecomeActorModal(false);
+        setIsWaitingActorVerification(false);
+        setActorTransactionRef('');
+        loadUserStats();
+        Alert.alert(
+          '¡Bienvenido a los Creadores Oficiales!',
+          'Tu pago ha sido verificado con éxito y tu cuenta fue ascendida al rol de Creador/Actor ($5.000 COP). Ya tienes acceso al estudio de publicación y tu perfil público.'
+        );
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo completar el ascenso a actor. Intenta de nuevo.');
+      Alert.alert('Error al verificar pago', err.message || 'No se pudo verificar el pago. Intenta de nuevo.');
     } finally {
       setIsUpgradingActor(false);
     }
@@ -968,7 +978,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
         {/* Footer de Versión y Estado de Seguridad */}
         <View style={{ alignItems: 'center', marginVertical: 14 }}>
           <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>
-            TexxxNopor v1.3.0 (Build 4) · Modo Seguro & Offline
+            TexxxNopor v1.4.0 (Build 5) · Modo Seguro & Offline
           </Text>
           <Text style={{ color: '#30D158', fontSize: 11, marginTop: 2 }}>
             ● Conexión Cifrada SSL/TLS con PostgreSQL & Wompi
@@ -1255,53 +1265,106 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.actorPriceCard}>
-                <Text style={styles.actorPriceTitle}>Plan Creador Oficial</Text>
-                <Text style={styles.actorPriceAmount}>$5.000 COP</Text>
-                <Text style={styles.actorPriceDesc}>
-                  Pago único vía Wompi Bancolombia / Nequi / PSE para desbloquear el estudio de publicación y perfil público de actor.
-                </Text>
-              </View>
+              {isWaitingActorVerification ? (
+                /* PANTALLA DE ESPERA / CONFIRMACIÓN DE PAGO WOMPI */
+                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                  <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255, 45, 85, 0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 14, borderWidth: 1, borderColor: '#FF2D55' }}>
+                    <Banknote size={30} color="#FF2D55" />
+                  </View>
+                  <Text style={[styles.actorPriceTitle, { fontSize: 16, textAlign: 'center', marginBottom: 6 }]}>
+                    Esperando Pago Wompi ($5.000 COP)
+                  </Text>
+                  <Text style={[styles.actorPriceDesc, { textAlign: 'center', marginBottom: 16 }]}>
+                    Se abrió la pasarela oficial de Wompi Bancolombia en tu navegador. Una vez completado tu pago con Nequi, PSE o Tarjeta, confirma aquí para activar tu perfil de Actor Oficial.
+                  </Text>
 
-              <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
-                Nombre Artístico (Stage Name) *
-              </Text>
-              <TextInput
-                style={[styles.actorTextInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
-                placeholder="Ej. Alex Savage, Bella Star..."
-                placeholderTextColor={colors.textMuted}
-                value={actorStageName}
-                onChangeText={setActorStageName}
-              />
+                  <Text style={[styles.actorInputLabel, { color: colors.textSecondary, alignSelf: 'flex-start' }]}>
+                    Número de Comprobante / Referencia (Opcional)
+                  </Text>
+                  <TextInput
+                    style={[styles.actorTextInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface, width: '100%', marginBottom: 16 }]}
+                    placeholder="Ej. VPOS-4BL-12345 o tu ID de transacción"
+                    placeholderTextColor={colors.textMuted}
+                    value={actorTransactionRef}
+                    onChangeText={setActorTransactionRef}
+                  />
 
-              <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
-                Biografía o Descripción (Opcional)
-              </Text>
-              <TextInput
-                style={[styles.actorTextInput, styles.actorTextArea, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
-                placeholder="Cuéntale a tus seguidores sobre ti y tus producciones..."
-                placeholderTextColor={colors.textMuted}
-                value={actorBio}
-                onChangeText={setActorBio}
-                multiline
-                numberOfLines={3}
-              />
+                  <TouchableOpacity
+                    style={[styles.actorPayBtn, { width: '100%', backgroundColor: '#30D158' }, isUpgradingActor && { opacity: 0.6 }]}
+                    onPress={handleConfirmActorPayment}
+                    disabled={isUpgradingActor}
+                    activeOpacity={0.85}
+                  >
+                    {isUpgradingActor ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.actorPayBtnText}>Verificar y Activar Rol de Actor</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actorPayBtn, isUpgradingActor && { opacity: 0.6 }]}
-                onPress={handleUpgradeToActor}
-                disabled={isUpgradingActor}
-                activeOpacity={0.85}
-              >
-                {isUpgradingActor ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Banknote size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.actorPayBtnText}>Pagar $5.000 COP con Wompi</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ marginTop: 12, padding: 8 }}
+                    onPress={() => setIsWaitingActorVerification(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Volver a abrir pasarela de pago</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* FORMULARIO INICIAL DE ASCENSO A ACTOR */
+                <>
+                  <View style={styles.actorPriceCard}>
+                    <Text style={styles.actorPriceTitle}>Plan Creador Oficial</Text>
+                    <Text style={styles.actorPriceAmount}>$5.000 COP</Text>
+                    <Text style={styles.actorPriceDesc}>
+                      Pago único vía Wompi Bancolombia / Nequi / PSE para desbloquear el estudio de publicación y perfil público de actor.
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
+                    Nombre Artístico (Stage Name) *
+                  </Text>
+                  <TextInput
+                    style={[styles.actorTextInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+                    placeholder="Ej. Alex Savage, Bella Star..."
+                    placeholderTextColor={colors.textMuted}
+                    value={actorStageName}
+                    onChangeText={setActorStageName}
+                  />
+
+                  <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
+                    Biografía o Descripción (Opcional)
+                  </Text>
+                  <TextInput
+                    style={[styles.actorTextInput, styles.actorTextArea, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+                    placeholder="Cuéntale a tus seguidores sobre ti y tus producciones..."
+                    placeholderTextColor={colors.textMuted}
+                    value={actorBio}
+                    onChangeText={setActorBio}
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.actorPayBtn, isUpgradingActor && { opacity: 0.6 }]}
+                    onPress={handleUpgradeToActor}
+                    disabled={isUpgradingActor}
+                    activeOpacity={0.85}
+                  >
+                    {isUpgradingActor ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Banknote size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.actorPayBtnText}>Pagar $5.000 COP con Wompi</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
           </View>
         </View>

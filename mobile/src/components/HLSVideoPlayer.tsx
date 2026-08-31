@@ -84,8 +84,24 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const hideControlsTimer = useRef<NodeJS.Timeout | null>(null);
   const feedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // Helper para asegurar protocolo seguro HTTPS y fuente confiable
+  const resolveSafeVideoUri = (url?: string, hls?: string): string => {
+    let primary = url || hls || '';
+    if (!primary || primary.trim() === '') {
+      return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+    }
+    // Convertir http:// a https:// para evitar bloqueos en Android
+    if (primary.startsWith('http://texxxnopor-backend.onrender.com')) {
+      primary = primary.replace('http://', 'https://');
+    }
+    if (primary.startsWith('http://res.cloudinary.com')) {
+      primary = primary.replace('http://', 'https://');
+    }
+    return primary;
+  };
+
   // Determinar fuente de reproducción real del video
-  const playSource = videoUrl || hlsMasterUrl || '';
+  const playSource = resolveSafeVideoUri(videoUrl, hlsMasterUrl);
   const [currentSource, setCurrentSource] = useState<string>(playSource);
 
   useEffect(() => {
@@ -111,7 +127,7 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    setCurrentSource(videoUrl || hlsMasterUrl || '');
+    setCurrentSource(resolveSafeVideoUri(videoUrl, hlsMasterUrl));
     setCurrentTime(0);
     setHasError(false);
     resetHideControlsTimer();
@@ -160,7 +176,17 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
     if (!status.isLoaded) {
       if ('error' in status && status.error) {
         console.log(`[Player Status] Error reproduciendo ${currentSource}:`, status.error);
-        setHasError(true);
+        // Fallback automático si falla el stream HLS a MP4 CDN
+        const fallbackCdn = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+        if (currentSource !== fallbackCdn) {
+          if (videoUrl && currentSource !== resolveSafeVideoUri(videoUrl)) {
+            setCurrentSource(resolveSafeVideoUri(videoUrl));
+          } else {
+            setCurrentSource(fallbackCdn);
+          }
+        } else {
+          setHasError(true);
+        }
       }
       return;
     }

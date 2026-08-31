@@ -1169,25 +1169,38 @@ const AdminAnalyticsScreen: React.FC<{ onSwitchToSpectator?: () => void }> = ({
               <Text style={styles.chartTitle}>Tendencia de Reproducciones Semanales</Text>
             </View>
             <View style={styles.barChartRow}>
-              {(analytics?.charts?.viewsTrend || [
-                { label: 'Lun', views: 10 },
-                { label: 'Mar', views: 18 },
-                { label: 'Mie', views: 15 },
-                { label: 'Jue', views: 25 },
-                { label: 'Vie', views: 32 },
-                { label: 'Sab', views: 45 },
-                { label: 'Dom', views: 40 },
-              ]).map((item: any, idx: number) => {
-                const maxVal = Math.max(...(analytics?.charts?.viewsTrend?.map((v: any) => v.views) || [50]));
-                const barHeight = Math.max(15, Math.min(100, Math.round((item.views / (maxVal || 1)) * 90)));
-                return (
-                  <View key={idx} style={styles.barColumn}>
-                    <Text style={styles.barValueText}>{item.views}</Text>
-                    <View style={[styles.barVisual, { height: barHeight, backgroundColor: idx === 5 ? '#FF2D55' : COLORS.neonLime }]} />
-                    <Text style={styles.barLabelText}>{item.label}</Text>
-                  </View>
-                );
-              })}
+              {(() => {
+                const trendData =
+                  Array.isArray(analytics?.charts?.viewsTrend) && analytics.charts.viewsTrend.length > 0
+                    ? analytics.charts.viewsTrend
+                    : [
+                        { label: 'Lun', views: 10 },
+                        { label: 'Mar', views: 18 },
+                        { label: 'Mie', views: 15 },
+                        { label: 'Jue', views: 25 },
+                        { label: 'Vie', views: 32 },
+                        { label: 'Sab', views: 45 },
+                        { label: 'Dom', views: 40 },
+                      ];
+                const maxVal = Math.max(1, ...trendData.map((v: any) => Number(v.views) || 0));
+
+                return trendData.map((item: any, idx: number) => {
+                  const val = Number(item.views) || 0;
+                  const barHeight = Math.max(15, Math.min(100, Math.round((val / maxVal) * 90)));
+                  return (
+                    <View key={idx} style={styles.barColumn}>
+                      <Text style={styles.barValueText}>{val}</Text>
+                      <View
+                        style={[
+                          styles.barVisual,
+                          { height: barHeight, backgroundColor: idx === 5 ? '#FF2D55' : COLORS.neonLime },
+                        ]}
+                      />
+                      <Text style={styles.barLabelText}>{item.label}</Text>
+                    </View>
+                  );
+                });
+              })()}
             </View>
           </View>
 
@@ -1198,22 +1211,30 @@ const AdminAnalyticsScreen: React.FC<{ onSwitchToSpectator?: () => void }> = ({
               <Text style={styles.chartTitle}>Crecimiento de Nuevos Registros</Text>
             </View>
             <View style={styles.barChartRow}>
-              {(analytics?.charts?.userGrowth || [
-                { label: 'Sem 1', users: 2 },
-                { label: 'Sem 2', users: 5 },
-                { label: 'Sem 3', users: 8 },
-                { label: 'Sem 4', users: 12 },
-              ]).map((item: any, idx: number) => {
-                const maxVal = Math.max(...(analytics?.charts?.userGrowth?.map((u: any) => u.users) || [15]));
-                const barHeight = Math.max(15, Math.min(100, Math.round((item.users / (maxVal || 1)) * 90)));
-                return (
-                  <View key={idx} style={styles.barColumn}>
-                    <Text style={styles.barValueText}>{item.users}</Text>
-                    <View style={[styles.barVisual, { height: barHeight, backgroundColor: '#0084FF' }]} />
-                    <Text style={styles.barLabelText}>{item.label}</Text>
-                  </View>
-                );
-              })}
+              {(() => {
+                const growthData =
+                  Array.isArray(analytics?.charts?.userGrowth) && analytics.charts.userGrowth.length > 0
+                    ? analytics.charts.userGrowth
+                    : [
+                        { label: 'Sem 1', users: 2 },
+                        { label: 'Sem 2', users: 5 },
+                        { label: 'Sem 3', users: 8 },
+                        { label: 'Sem 4', users: 12 },
+                      ];
+                const maxVal = Math.max(1, ...growthData.map((u: any) => Number(u.users) || 0));
+
+                return growthData.map((item: any, idx: number) => {
+                  const val = Number(item.users) || 0;
+                  const barHeight = Math.max(15, Math.min(100, Math.round((val / maxVal) * 90)));
+                  return (
+                    <View key={idx} style={styles.barColumn}>
+                      <Text style={styles.barValueText}>{val}</Text>
+                      <View style={[styles.barVisual, { height: barHeight, backgroundColor: '#0084FF' }]} />
+                      <Text style={styles.barLabelText}>{item.label}</Text>
+                    </View>
+                  );
+                });
+              })()}
             </View>
           </View>
         </>

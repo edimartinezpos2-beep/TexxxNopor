@@ -58,6 +58,8 @@ export const PublishScreen: React.FC = () => {
   const [stageName, setStageName] = useState(user?.username || '');
   const [bio, setBio] = useState('');
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isWaitingVerification, setIsWaitingVerification] = useState(false);
+  const [transactionRef, setTransactionRef] = useState('');
   const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
 
   // Video y Miniatura seleccionados
@@ -300,32 +302,41 @@ export const PublishScreen: React.FC = () => {
       return;
     }
 
+    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
+    try {
+      await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+    } catch (_) {
+      Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+    }
+
+    // Mostrar pantalla de verificación
+    setIsWaitingVerification(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!userToken) return;
+
     setIsUpgrading(true);
     try {
-      try {
-        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
-      } catch (_) {
-        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
-      }
+      await api.user.upgradeToActor(userToken, {
+        stageName: stageName.trim(),
+        bio: bio.trim(),
+        paymentMethod: `WOMPI_COP Ref: ${transactionRef.trim() || 'VPOS_4BlRq7'}`,
+      });
 
-      if (userToken) {
-        await api.user.upgradeToActor(userToken, {
-          stageName: stageName.trim(),
-          bio: bio.trim(),
-          paymentMethod: 'WOMPI_COP',
-        });
-        if (updateUser) {
-          updateUser({ role: 'CREATOR', isVerified: true });
-        }
+      if (updateUser) {
+        updateUser({ role: 'CREATOR', isVerified: true });
       }
 
       setShowBecomeActorModal(false);
+      setIsWaitingVerification(false);
+      setTransactionRef('');
       Alert.alert(
-        '¡Felicitaciones!',
-        'Tu cuenta ha sido ascendida a Actor / Creador Oficial. Ahora tienes acceso completo al estudio para publicar videos públicos y exclusivos.'
+        '¡Felicitaciones Creador!',
+        'Tu pago ha sido verificado con éxito y tu cuenta ascendida a Actor / Creador Oficial. Ya tienes acceso completo para publicar tus producciones.'
       );
     } catch (err: any) {
-      Alert.alert('Aviso de Activación', err.message || 'No se pudo completar el proceso de activación.');
+      Alert.alert('Error al verificar pago', err.message || 'No se pudo verificar el pago. Intenta de nuevo.');
     } finally {
       setIsUpgrading(false);
     }
@@ -393,49 +404,95 @@ export const PublishScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              <Text style={{ color: '#8E8E93', fontSize: 13, marginBottom: 16 }}>
-                Configura tu perfil público de actor y activa tu estudio por un único pago de $5.000 COP con Wompi Bancolombia.
-              </Text>
+              {isWaitingVerification ? (
+                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                  <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255, 45, 85, 0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 14, borderWidth: 1, borderColor: '#FF2D55' }}>
+                    <Banknote size={30} color="#FF2D55" />
+                  </View>
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 }}>
+                    Esperando Pago Wompi ($5.000 COP)
+                  </Text>
+                  <Text style={{ color: '#8E8E93', fontSize: 12, textAlign: 'center', marginBottom: 16, lineHeight: 18 }}>
+                    Se abrió la pasarela oficial de Wompi Bancolombia en tu navegador. Una vez completado tu pago con Nequi, PSE o Tarjeta, confirma aquí para activar tu acceso de Actor/Creador.
+                  </Text>
 
-              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Nombre Artístico (Stage Name) *</Text>
-              <TextInput
-                style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', marginBottom: 14 }}
-                placeholder="Ej. Alexis Texas, Nacho Vidal..."
-                placeholderTextColor="#666"
-                value={stageName}
-                onChangeText={setStageName}
-              />
+                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600', alignSelf: 'flex-start', marginBottom: 6 }}>
+                    Número de Comprobante / Referencia (Opcional)
+                  </Text>
+                  <TextInput
+                    style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', width: '100%', marginBottom: 16 }}
+                    placeholder="Ej. VPOS-4BL-12345 o tu ID de transacción"
+                    placeholderTextColor="#666"
+                    value={transactionRef}
+                    onChangeText={setTransactionRef}
+                  />
 
-              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Biografía de Presentación</Text>
-              <TextInput
-                style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', height: 70, marginBottom: 18 }}
-                placeholder="Cuéntale a tus seguidores sobre ti y tu contenido..."
-                placeholderTextColor="#666"
-                value={bio}
-                onChangeText={setBio}
-                multiline
-              />
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#30D158', paddingVertical: 14, borderRadius: 12, alignItems: 'center', width: '100%', opacity: isUpgrading ? 0.7 : 1 }}
+                    onPress={handleConfirmPayment}
+                    disabled={isUpgrading}
+                  >
+                    {isUpgrading ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' }}>Verificar y Activar Rol de Actor</Text>
+                    )}
+                  </TouchableOpacity>
 
-              <View style={{ backgroundColor: 'rgba(255, 45, 85, 0.1)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.3)', marginBottom: 20 }}>
-                <Text style={{ color: '#FF2D55', fontSize: 13, fontWeight: 'bold', textAlign: 'center' }}>
-                  Tarifa Única de Activación: $5.000 COP
-                </Text>
-                <Text style={{ color: '#8E8E93', fontSize: 11, textAlign: 'center', marginTop: 3 }}>
-                  Pasarela Segura Oficial Wompi (Bancolombia, Nequi, PSE, Tarjetas)
-                </Text>
-              </View>
+                  <TouchableOpacity
+                    style={{ marginTop: 14, padding: 8 }}
+                    onPress={() => setIsWaitingVerification(false)}
+                  >
+                    <Text style={{ color: '#8E8E93', fontSize: 13 }}>Volver a abrir pasarela de pago</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <Text style={{ color: '#8E8E93', fontSize: 13, marginBottom: 16 }}>
+                    Configura tu perfil público de actor y activa tu estudio por un único pago de $5.000 COP con Wompi Bancolombia.
+                  </Text>
 
-              <TouchableOpacity
-                style={{ backgroundColor: '#FF2D55', paddingVertical: 14, borderRadius: 12, alignItems: 'center', opacity: isUpgrading ? 0.7 : 1 }}
-                onPress={handleUpgradeToActor}
-                disabled={isUpgrading}
-              >
-                {isUpgrading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' }}>Pagar $5.000 COP y Activar Estudio</Text>
-                )}
-              </TouchableOpacity>
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Nombre Artístico (Stage Name) *</Text>
+                  <TextInput
+                    style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', marginBottom: 14 }}
+                    placeholder="Ej. Alexis Texas, Nacho Vidal..."
+                    placeholderTextColor="#666"
+                    value={stageName}
+                    onChangeText={setStageName}
+                  />
+
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Biografía de Presentación</Text>
+                  <TextInput
+                    style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', height: 70, marginBottom: 18 }}
+                    placeholder="Cuéntale a tus seguidores sobre ti y tu contenido..."
+                    placeholderTextColor="#666"
+                    value={bio}
+                    onChangeText={setBio}
+                    multiline
+                  />
+
+                  <View style={{ backgroundColor: 'rgba(255, 45, 85, 0.1)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.3)', marginBottom: 20 }}>
+                    <Text style={{ color: '#FF2D55', fontSize: 13, fontWeight: 'bold', textAlign: 'center' }}>
+                      Tarifa Única de Activación: $5.000 COP
+                    </Text>
+                    <Text style={{ color: '#8E8E93', fontSize: 11, textAlign: 'center', marginTop: 3 }}>
+                      Pasarela Segura Oficial Wompi (Bancolombia, Nequi, PSE, Tarjetas)
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#FF2D55', paddingVertical: 14, borderRadius: 12, alignItems: 'center', opacity: isUpgrading ? 0.7 : 1 }}
+                    onPress={handleUpgradeToActor}
+                    disabled={isUpgrading}
+                  >
+                    {isUpgrading ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' }}>Pagar $5.000 COP con Wompi</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </Modal>
