@@ -11,7 +11,10 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Modal,
+  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import {
   ShieldCheck,
   UploadCloud,
@@ -33,20 +36,29 @@ import {
   Film,
   Check,
   X,
+  Banknote,
+  Crown,
 } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../theme/colors';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import * as ImagePicker from 'expo-image-picker';
 
 export const PublishScreen: React.FC = () => {
-  const { userToken, user } = useAuth();
+  const { userToken, user, updateUser } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Para ti');
   const [selectedTags, setSelectedTags] = useState<string[]>(['#parati', '#hd']);
   const [customTagInput, setCustomTagInput] = useState('');
   const [selectedVisibility, setSelectedVisibility] = useState('Público');
+
+  // Modal para convertirse en actor ($5.000 COP)
+  const [showBecomeActorModal, setShowBecomeActorModal] = useState(false);
+  const [stageName, setStageName] = useState(user?.username || '');
+  const [bio, setBio] = useState('');
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
 
   // Video y Miniatura seleccionados
   const [selectedVideo, setSelectedVideo] = useState<{ uri: string; name?: string; duration?: number } | null>(null);
@@ -281,6 +293,155 @@ export const PublishScreen: React.FC = () => {
       setUploadStatus('');
     }
   };
+
+  const handleUpgradeToActor = async () => {
+    if (!stageName.trim()) {
+      Alert.alert('Nombre Artístico Requerido', 'Por favor ingresa tu nombre artístico para tu perfil de actor/creador.');
+      return;
+    }
+
+    setIsUpgrading(true);
+    try {
+      try {
+        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      } catch (_) {
+        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      }
+
+      if (userToken) {
+        await api.user.upgradeToActor(userToken, {
+          stageName: stageName.trim(),
+          bio: bio.trim(),
+          paymentMethod: 'WOMPI_COP',
+        });
+        if (updateUser) {
+          updateUser({ role: 'CREATOR', isVerified: true });
+        }
+      }
+
+      setShowBecomeActorModal(false);
+      Alert.alert(
+        '¡Felicitaciones!',
+        'Tu cuenta ha sido ascendida a Actor / Creador Oficial. Ahora tienes acceso completo al estudio para publicar videos públicos y exclusivos.'
+      );
+    } catch (err: any) {
+      Alert.alert('Aviso de Activación', err.message || 'No se pudo completar el proceso de activación.');
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  // Si el usuario es espectador (CONSUMER), mostrar panel informativo de ascenso por $5.000 COP
+  if (user?.role === 'CONSUMER') {
+    return (
+      <View style={[styles.container, { paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center' }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255, 45, 85, 0.12)', justifyContent: 'center', alignItems: 'center', marginBottom: 18, borderWidth: 1.5, borderColor: '#FF2D55' }}>
+          <Film size={40} color="#FF2D55" />
+        </View>
+        <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 8 }}>
+          Estudio de Publicación Oficial
+        </Text>
+        <Text style={{ color: '#8E8E93', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24, paddingHorizontal: 10 }}>
+          Para publicar videos normales o exclusivos para tus seguidores, necesitas activar tu cuenta como Actor / Creador Oficial por solo $5.000 COP.
+        </Text>
+
+        <View style={{ backgroundColor: COLORS.surfaceCard, borderRadius: 16, padding: 18, width: '100%', borderWidth: 1, borderColor: COLORS.border, marginBottom: 24, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={16} color="#30D158" />
+            <Text style={{ color: '#FFFFFF', fontSize: 13, flex: 1, fontWeight: '600' }}>Sube videos públicos y exclusivos en 4K</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={16} color="#30D158" />
+            <Text style={{ color: '#FFFFFF', fontSize: 13, flex: 1, fontWeight: '600' }}>Perfil verificado de actor con portada y playlists</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={16} color="#30D158" />
+            <Text style={{ color: '#FFFFFF', fontSize: 13, flex: 1, fontWeight: '600' }}>Gana seguidores y monetiza tus estrenos</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={16} color="#FFD700" />
+            <Text style={{ color: '#FFD700', fontSize: 13, flex: 1, fontWeight: '700' }}>Tarifa única de activación: $5.000 COP</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={{ width: '100%', backgroundColor: '#FF2D55', paddingVertical: 16, borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}
+          onPress={() => setShowBecomeActorModal(true)}
+          activeOpacity={0.85}
+        >
+          <Crown size={18} color="#FFFFFF" />
+          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>🌟 Convertirme en Actor ($5.000 COP)</Text>
+        </TouchableOpacity>
+
+        {/* Modal de Ascenso a Actor */}
+        <Modal
+          visible={showBecomeActorModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowBecomeActorModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: '#13131A', borderRadius: 20, padding: 22, borderWidth: 1, borderColor: '#FF2D55' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Crown size={20} color="#FFD700" />
+                  <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>Registro de Actor / Creador</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowBecomeActorModal(false)}>
+                  <X size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ color: '#8E8E93', fontSize: 13, marginBottom: 16 }}>
+                Configura tu perfil público de actor y activa tu estudio por un único pago de $5.000 COP con Wompi Bancolombia.
+              </Text>
+
+              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Nombre Artístico (Stage Name) *</Text>
+              <TextInput
+                style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', marginBottom: 14 }}
+                placeholder="Ej. Alexis Texas, Nacho Vidal..."
+                placeholderTextColor="#666"
+                value={stageName}
+                onChangeText={setStageName}
+              />
+
+              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Biografía de Presentación</Text>
+              <TextInput
+                style={{ backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, color: '#FFFFFF', borderWidth: 1, borderColor: '#2C2C38', height: 70, marginBottom: 18 }}
+                placeholder="Cuéntale a tus seguidores sobre ti y tu contenido..."
+                placeholderTextColor="#666"
+                value={bio}
+                onChangeText={setBio}
+                multiline
+              />
+
+              <View style={{ backgroundColor: 'rgba(255, 45, 85, 0.1)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.3)', marginBottom: 20 }}>
+                <Text style={{ color: '#FF2D55', fontSize: 13, fontWeight: 'bold', textAlign: 'center' }}>
+                  Tarifa Única de Activación: $5.000 COP
+                </Text>
+                <Text style={{ color: '#8E8E93', fontSize: 11, textAlign: 'center', marginTop: 3 }}>
+                  Pasarela Segura Oficial Wompi (Bancolombia, Nequi, PSE, Tarjetas)
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={{ backgroundColor: '#FF2D55', paddingVertical: 14, borderRadius: 12, alignItems: 'center', opacity: isUpgrading ? 0.7 : 1 }}
+                onPress={handleUpgradeToActor}
+                disabled={isUpgrading}
+              >
+                {isUpgrading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' }}>Pagar $5.000 COP y Activar Estudio</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

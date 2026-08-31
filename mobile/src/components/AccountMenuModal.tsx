@@ -50,12 +50,15 @@ import {
   Users,
   Share2,
   FolderHeart,
+  DownloadCloud,
+  Download,
 } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import { PremiumGatewayModal } from './PremiumGatewayModal';
+import { OfflineDownloadsModal } from './OfflineDownloadsModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.88, 380);
@@ -87,6 +90,7 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
   const { isDark, setThemeMode, colors } = useTheme();
   const [currentView, setCurrentView] = useState<ActiveSubView>('MENU');
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
 
   // Estados de Configuración de UI (conforme a la imagen)
   const [currency, setCurrency] = useState<'COP' | 'USD' | 'EUR' | 'MXN'>('COP');
@@ -406,6 +410,22 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
                     </Text>
                   </View>
                   <ChevronRight size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* 📥 Mis Descargas Offline */}
+                <TouchableOpacity
+                  style={styles.menuItemRow}
+                  onPress={() => setShowOfflineModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <DownloadCloud size={18} color="#30D158" />
+                    <Text style={styles.menuItemLabel}>Mis Descargas Offline</Text>
+                  </View>
+                  <View style={[styles.badgeCount, { backgroundColor: 'rgba(48, 209, 88, 0.15)' }]}>
+                    <Text style={[styles.badgeCountText, { color: '#30D158' }]}>Offline</Text>
+                    <ChevronRight size={16} color="#30D158" />
+                  </View>
                 </TouchableOpacity>
 
                 {/* 💵 Moneda de pago */}
@@ -896,6 +916,17 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
           if (userToken) {
             api.user.getSubscriptions(userToken).then(setSubscriptions);
           }
+        }}
+      />
+
+      {/* MODAL DE DESCARGAS OFFLINE */}
+      <OfflineDownloadsModal
+        visible={showOfflineModal}
+        onClose={() => setShowOfflineModal(false)}
+        onSelectVideo={(video) => {
+          setShowOfflineModal(false);
+          onClose();
+          if (onSelectVideo) onSelectVideo(video);
         }}
       />
     </Modal>

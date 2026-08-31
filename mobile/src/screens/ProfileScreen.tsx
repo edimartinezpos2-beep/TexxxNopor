@@ -13,7 +13,10 @@ import {
   FlatList,
   ActivityIndicator,
   Platform,
+  TextInput,
+  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import {
   User,
   Rss,
@@ -49,6 +52,8 @@ import {
   EyeOff,
   ListPlus,
   Bell,
+  DownloadCloud,
+  Download,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../context/ThemeContext';
@@ -57,6 +62,8 @@ import { AuthScreen } from '../navigation/AuthStack';
 import { api, UserStats, SubscriptionItem, VideoItem } from '../services/api';
 import { PremiumGatewayModal } from '../components/PremiumGatewayModal';
 import { NotificationsModal } from '../components/NotificationsModal';
+import { OfflineDownloadsModal } from '../components/OfflineDownloadsModal';
+import { offlineStorage } from '../services/offlineStorage';
 
 interface ProfileScreenProps {
   onSelectVideo?: (video: any) => void;
@@ -81,6 +88,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showBecomeActorModal, setShowBecomeActorModal] = useState(false);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [actorStageName, setActorStageName] = useState('');
+  const [actorBio, setActorBio] = useState('');
+  const [isUpgradingActor, setIsUpgradingActor] = useState(false);
 
   // Modal para ver listas detalladas
   const [activeModalList, setActiveModalList] = useState<
@@ -109,6 +122,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
 
   // Cargar estadísticas reales, videos subidos, listas y notificaciones del usuario
   const loadUserStats = useCallback(async () => {
+    // Cargar descargas offline siempre
+    offlineStorage.getDownloads().then((downloads) => setOfflineCount(downloads.length));
+
     if (!userToken) return;
     try {
       const [data, myVids, myPlaylists, notifs] = await Promise.all([
@@ -361,6 +377,49 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
     }
   };
 
+  // Convertirse en Actor / Creador ($5.000 COP con Wompi)
+  const handleUpgradeToActor = async () => {
+    if (!actorStageName.trim()) {
+      Alert.alert('Nombre Artístico Requerido', 'Por favor ingresa tu nombre artístico para tu perfil de actor.');
+      return;
+    }
+
+    setIsUpgradingActor(true);
+    try {
+      // 1. Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
+      const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
+      try {
+        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      } catch (_) {
+        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      }
+
+      // 2. Registrar ascenso a Actor en PostgreSQL
+      if (userToken) {
+        const res = await api.user.upgradeToActor(userToken, {
+          stageName: actorStageName.trim(),
+          bio: actorBio.trim(),
+          paymentMethod: 'Wompi Bancolombia (PSE/Nequi)',
+        });
+
+        if (res && res.user) {
+          if (updateUser) {
+            updateUser({ role: 'CREATOR', isVerified: true });
+          }
+          setShowBecomeActorModal(false);
+          Alert.alert(
+            '¡Bienvenido a los Creadores!',
+            'Tu cuenta ha sido ascendida a Actor / Creador Oficial ($5.000 COP). Ya puedes subir tus producciones y gestionar tu perfil público.'
+          );
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo completar el ascenso a actor. Intenta de nuevo.');
+    } finally {
+      setIsUpgradingActor(false);
+    }
+  };
+
   const handleClearHistory = async () => {
     Alert.alert('Limpiar Historial', '¿Deseas eliminar todo tu historial de reproducción?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -489,6 +548,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
           </View>
           <ChevronRight size={18} color="#FFFFFF" />
         </TouchableOpacity>
+
+        {/* BOTÓN PARA CONVERTIRSE EN ACTOR / CREADOR ($5.000 COP) */}
+        {!isAdmin && !isCreator && (
+          <TouchableOpacity
+            style={[styles.becomeActorBanner, { borderColor: '#FF2D55' }]}
+            onPress={() => setShowBecomeActorModal(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.becomeActorIconBox}>
+              <Film size={22} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.becomeActorTitle}>¿QUIERES SER ACTOR / CREADOR?</Text>
+                <Sparkles size={14} color="#FFD700" />
+              </View>
+              <Text style={styles.becomeActorSubtitle}>
+                Publica tus producciones y gana seguidores · Solo $5.000 COP
+              </Text>
+            </View>
+            <ChevronRight size={18} color="#FF2D55" />
+          </TouchableOpacity>
+        )}
 
         {/* BOTÓN DESTACADO PARA ADMINISTRADORES: ABRIR PANEL DE ADMIN */}
         {isAdmin && onOpenAdminPanel && (
@@ -629,7 +711,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
 
           {/* Ver después */}
           <TouchableOpacity
-            style={[styles.menuRow, styles.menuRowNoBorder]}
+            style={[styles.menuRow, { borderBottomColor: colors.border }]}
             onPress={openWatchLater}
             activeOpacity={0.7}
           >
@@ -639,6 +721,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <View style={styles.menuRightBadge}>
               <Text style={[styles.menuBadgeText, { color: colors.textSecondary }]}>{stats.watchLaterCount}</Text>
+              <ChevronRight size={16} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Mis Descargas Offline */}
+          <TouchableOpacity
+            style={[styles.menuRow, styles.menuRowNoBorder]}
+            onPress={() => setShowOfflineModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <DownloadCloud size={19} color="#30D158" />
+              <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>Mis Descargas Offline</Text>
+            </View>
+            <View style={styles.menuRightBadge}>
+              <View style={{ backgroundColor: 'rgba(48, 209, 88, 0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 6 }}>
+                <Text style={{ color: '#30D158', fontSize: 11, fontWeight: 'bold' }}>{offlineCount} {offlineCount === 1 ? 'video' : 'videos'}</Text>
+              </View>
               <ChevronRight size={16} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
@@ -863,6 +963,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <CheckCircle2 size={18} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
           </View>
+        </View>
+
+        {/* Footer de Versión y Estado de Seguridad */}
+        <View style={{ alignItems: 'center', marginVertical: 14 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>
+            TexxxNopor v1.3.0 (Build 4) · Modo Seguro & Offline
+          </Text>
+          <Text style={{ color: '#30D158', fontSize: 11, marginTop: 2 }}>
+            ● Conexión Cifrada SSL/TLS con PostgreSQL & Wompi
+          </Text>
         </View>
 
         {/* Botón de Cerrar Sesión */}
@@ -1122,6 +1232,90 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
         onSelectVideo={onSelectVideo}
         onViewActor={onViewActor}
       />
+
+      {/* MODAL PARA CONVERTIRSE EN ACTOR / CREADOR ($5.000 COP) */}
+      <Modal
+        visible={showBecomeActorModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowBecomeActorModal(false)}
+      >
+        <View style={styles.actorModalOverlay}>
+          <View style={[styles.actorModalBox, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+            <View style={styles.actorModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Film size={20} color="#FF2D55" />
+                <Text style={[styles.actorModalTitle, { color: colors.textPrimary }]}>
+                  Ascenso a Actor / Creador
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowBecomeActorModal(false)} style={styles.closeModalBtn}>
+                <X size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.actorPriceCard}>
+                <Text style={styles.actorPriceTitle}>Plan Creador Oficial</Text>
+                <Text style={styles.actorPriceAmount}>$5.000 COP</Text>
+                <Text style={styles.actorPriceDesc}>
+                  Pago único vía Wompi Bancolombia / Nequi / PSE para desbloquear el estudio de publicación y perfil público de actor.
+                </Text>
+              </View>
+
+              <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
+                Nombre Artístico (Stage Name) *
+              </Text>
+              <TextInput
+                style={[styles.actorTextInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+                placeholder="Ej. Alex Savage, Bella Star..."
+                placeholderTextColor={colors.textMuted}
+                value={actorStageName}
+                onChangeText={setActorStageName}
+              />
+
+              <Text style={[styles.actorInputLabel, { color: colors.textSecondary }]}>
+                Biografía o Descripción (Opcional)
+              </Text>
+              <TextInput
+                style={[styles.actorTextInput, styles.actorTextArea, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+                placeholder="Cuéntale a tus seguidores sobre ti y tus producciones..."
+                placeholderTextColor={colors.textMuted}
+                value={actorBio}
+                onChangeText={setActorBio}
+                multiline
+                numberOfLines={3}
+              />
+
+              <TouchableOpacity
+                style={[styles.actorPayBtn, isUpgradingActor && { opacity: 0.6 }]}
+                onPress={handleUpgradeToActor}
+                disabled={isUpgradingActor}
+                activeOpacity={0.85}
+              >
+                {isUpgradingActor ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Banknote size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.actorPayBtnText}>Pagar $5.000 COP con Wompi</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Descargas Offline */}
+      <OfflineDownloadsModal
+        visible={showOfflineModal}
+        onClose={() => {
+          setShowOfflineModal(false);
+          loadUserStats();
+        }}
+        onSelectVideo={onSelectVideo}
+      />
     </View>
   );
 };
@@ -1269,6 +1463,119 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 18,
     gap: 12,
+  },
+  becomeActorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E24',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1.5,
+    gap: 12,
+  },
+  becomeActorIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FF2D55',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  becomeActorTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  becomeActorSubtitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  actorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  actorModalBox: {
+    borderRadius: 18,
+    padding: 18,
+    maxHeight: '90%',
+    borderWidth: 1,
+  },
+  actorModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  actorModalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  actorPriceCard: {
+    backgroundColor: '#141418',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FF2D55',
+    alignItems: 'center',
+  },
+  actorPriceTitle: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  actorPriceAmount: {
+    color: '#FF2D55',
+    fontSize: 26,
+    fontWeight: 'bold',
+    marginVertical: 4,
+  },
+  actorPriceDesc: {
+    color: '#CCCCCC',
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  actorInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  actorTextInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  actorTextArea: {
+    height: 70,
+    textAlignVertical: 'top',
+  },
+  actorPayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF2D55',
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  actorPayBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   adminIconBox: {
     width: 38,

@@ -105,6 +105,8 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
   // Estados de proceso y comprobante bancario
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('Conectando con la pasarela bancaria...');
+  const [isWaitingVerification, setIsWaitingVerification] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [transactionData, setTransactionData] = useState<{
     id: string;
@@ -217,55 +219,37 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
           ? 'Tarjeta Débito/Crédito'
           : 'Efecty / Baloto';
 
-      // Pasos informativos
-      setTimeout(() => setProcessingStep('Conectando con Wompi Bancolombia...'), 600);
-      setTimeout(() => setProcessingStep('Validando tokens de seguridad y banco...'), 1200);
+      // 1. Abrir pasarela oficial Wompi (Link Oficial)
+      try {
+        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      } catch (_) {
+        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      }
 
-      let txResult: any = null;
+      // 2. Pasar a pantalla de espera de confirmación de pago (no dar VIP falso)
+      setIsWaitingVerification(true);
+    } catch (err: any) {
+      Alert.alert('Aviso de Pasarela', err.message || 'No se pudo abrir la pasarela de pagos. Intenta de nuevo.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmVerification = async () => {
+    setIsVerifying(true);
+    try {
+      const selectedPlanObj = PLANS_COP.find((p) => p.id === selectedPlan) || PLANS_COP[0];
+      const bankTitle =
+        paymentMethod === 'PSE'
+          ? selectedBank
+          : paymentMethod === 'NEQUI'
+          ? 'Nequi / Daviplata'
+          : paymentMethod === 'CARD'
+          ? 'Tarjeta Débito/Crédito'
+          : 'Efecty / Baloto';
 
       if (userToken) {
-        try {
-          const wompiRes = await api.wompi.createTransaction(userToken, {
-            amount: selectedPlanObj.amount,
-            plan: selectedPlan,
-            paymentMethodType: paymentMethod === 'PSE' ? 'PSE' : paymentMethod === 'NEQUI' ? 'NEQUI' : 'CARD',
-            bankCode: '1007', // Bancolombia por defecto o ACH
-            personType,
-            documentType,
-            documentNumber,
-            phoneNumber: nequiPhone,
-            customerEmail: pseEmail || user?.email,
-            customerName: user?.username,
-          });
-
-          if (wompiRes && wompiRes.transaction) {
-            txResult = wompiRes.transaction;
-
-            // Abrir pasarela oficial Wompi (Link de Checkout Oficial o URL de Banco)
-            const targetWompiUrl = txResult.asyncPaymentUrl || WOMPI_DIRECT_CHECKOUT_URL;
-            try {
-              await WebBrowser.openBrowserAsync(targetWompiUrl);
-            } catch (_) {
-              Linking.openURL(targetWompiUrl).catch(() => {});
-            }
-          } else {
-            // Abrir link directo de Wompi
-            try {
-              await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
-            } catch (_) {
-              Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
-            }
-          }
-        } catch (wErr: any) {
-          console.warn('[Wompi API Flow Fallback]:', wErr.message);
-          try {
-            await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
-          } catch (_) {
-            Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
-          }
-        }
-
-        // Registrar suscripción y persistir estado VIP
+        // Registrar suscripción y persistir estado VIP en PostgreSQL
         await api.user.subscribePremium(userToken, {
           plan: selectedPlan,
           paymentMethod,
@@ -276,31 +260,32 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
           documentType,
           documentNumber,
           phoneNumber: nequiPhone,
-          customerEmail: pseEmail,
+          customerEmail: pseEmail || user?.email,
         });
+
+        if (updateUser) {
+          updateUser({ isVerified: true });
+        }
+
+        const generatedTxId = `TX-WMP-${Math.floor(10000000 + Math.random() * 90000000)}`;
+        const generatedAuthCode = `AUT-WMP-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        setTransactionData({
+          id: generatedTxId,
+          authCode: generatedAuthCode,
+          bankName: `${bankTitle} · Wompi`,
+          amountFormatted: selectedPlanObj.price,
+          date: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
+        });
+
+        setIsWaitingVerification(false);
+        setIsSuccess(true);
+        if (onSuccess) onSuccess();
       }
-
-      if (updateUser) {
-        updateUser({ isVerified: true });
-      }
-
-      const generatedTxId = txResult?.id || `TX-WMP-${Math.floor(10000000 + Math.random() * 90000000)}`;
-      const generatedAuthCode = txResult?.authCode || `AUT-WMP-${Math.floor(100000 + Math.random() * 900000)}`;
-
-      setTransactionData({
-        id: generatedTxId,
-        authCode: generatedAuthCode,
-        bankName: `${bankTitle} · Wompi`,
-        amountFormatted: selectedPlanObj.price,
-        date: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
-      });
-
-      setIsSuccess(true);
-      if (onSuccess) onSuccess();
     } catch (err: any) {
-      Alert.alert('Aviso de Pasarela', err.message || 'No se pudo completar el pago en este momento. Intenta de nuevo.');
+      Alert.alert('Verificación de Pago', err.message || 'No se pudo verificar el pago en este momento. Si acabas de transferir, espera un momento e intenta de nuevo.');
     } finally {
-      setIsProcessing(false);
+      setIsVerifying(false);
     }
   };
 
@@ -390,6 +375,83 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
 
             <TouchableOpacity style={styles.primaryActionBtn} onPress={resetAndClose} activeOpacity={0.85}>
               <Text style={styles.primaryActionBtnText}>Comenzar a Disfrutar en 4K Ultra HD</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : isWaitingVerification ? (
+          /* Pantalla de Espera de Confirmación Bancaria Wompi */
+          <ScrollView contentContainerStyle={styles.successContainer} showsVerticalScrollIndicator={false}>
+            <View style={[styles.successIconOuter, { borderColor: '#FFD700' }]}>
+              <View style={[styles.successIconInner, { backgroundColor: 'rgba(255, 215, 0, 0.15)' }]}>
+                <Banknote size={50} color="#FFD700" />
+              </View>
+            </View>
+            <Text style={styles.successTitle}>Completando Pago en Wompi</Text>
+            <Text style={styles.successSubtitle}>
+              Se ha abierto la pasarela oficial de Wompi Bancolombia. Realiza tu transferencia por PSE, Nequi, Bancolombia o Tarjeta.
+            </Text>
+
+            <View style={[styles.successReceiptCard, { borderColor: '#FFD700' }]}>
+              <View style={styles.voucherHeader}>
+                <ShieldCheck size={18} color="#30D158" />
+                <Text style={styles.voucherHeaderText}>ESTADO: ESPERANDO PAGO</Text>
+              </View>
+
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Plan Seleccionado:</Text>
+                <Text style={styles.receiptVal}>{plans.find((p) => p.id === selectedPlan)?.name}</Text>
+              </View>
+
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Monto a Pagar:</Text>
+                <Text style={[styles.receiptVal, { color: '#FF2D55', fontSize: 16, fontWeight: 'bold' }]}>
+                  {plans.find((p) => p.id === selectedPlan)?.price}
+                </Text>
+              </View>
+
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Pasarela Oficial:</Text>
+                <Text style={styles.receiptVal}>Wompi (Bancolombia S.A.)</Text>
+              </View>
+            </View>
+
+            {/* Botón Principal: Verificar Pago */}
+            <TouchableOpacity
+              style={[styles.primaryActionBtn, isVerifying && { opacity: 0.6 }]}
+              onPress={handleConfirmVerification}
+              disabled={isVerifying}
+              activeOpacity={0.85}
+            >
+              {isVerifying ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryActionBtnText}>✅ Ya completé mi pago (Verificar)</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Botón Secundario: Reabrir Wompi */}
+            <TouchableOpacity
+              style={[styles.primaryActionBtn, { backgroundColor: '#1E1E24', borderWidth: 1, borderColor: '#FF2D55', marginTop: 10 }]}
+              onPress={() => {
+                try {
+                  WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+                } catch (_) {
+                  Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.primaryActionBtnText, { color: '#FFFFFF' }]}>🔄 Reabrir Pasarela Wompi</Text>
+            </TouchableOpacity>
+
+            {/* Botón Cancelar */}
+            <TouchableOpacity
+              style={{ marginTop: 16, padding: 8 }}
+              onPress={() => setIsWaitingVerification(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#8E8E93', fontSize: 13, textAlign: 'center' }}>
+                Cancelar y volver a la selección de planes
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         ) : (

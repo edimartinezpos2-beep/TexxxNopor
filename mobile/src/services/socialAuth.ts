@@ -125,34 +125,15 @@ export class SocialAuthService {
     }
 
     // ====================================================
-    // FLUJO PARA CELULARES (Expo Go, Android, iOS)
-    // - NO usa expo-auth-session ni expo-crypto (evita error ExpoCryptoAES)
-    // - Redirige mediante auth.expo.io (compatible con Expo Go sin build nativo)
+    // FLUJO PARA CELULARES (Android APK, iOS y Expo)
+    // - Usa el servidor backend OAuth con redirección a deep link texxxnopor://auth
+    // - Compatible con APK independiente y Expo sin error de auth.expo.io
     // ====================================================
-    const redirectUri = getMobileRedirectUri();
-    console.log(`📱 [Mobile OAuth] Redirect URI:`, redirectUri);
+    const backendOAuthUrl = `${API_BASE_URL}/api/auth/${providerPath}/start?redirect_scheme=texxxnopor`;
+    const redirectScheme = 'texxxnopor://auth';
+    console.log(`📱 [Mobile OAuth] Abriendo sesión para ${provider}:`, backendOAuthUrl);
 
-    let authUrl = '';
-    if (provider === 'GOOGLE') {
-      authUrl =
-        `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=token%20id_token` +
-        `&scope=${encodeURIComponent('openid email profile')}` +
-        `&nonce=${this.generateNonce()}` +
-        `&prompt=select_account`;
-    } else {
-      authUrl =
-        `https://www.facebook.com/v19.0/dialog/oauth?` +
-        `client_id=${encodeURIComponent(FACEBOOK_APP_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=token` +
-        `&scope=public_profile`;
-    }
-
-    console.log(`📱 [Mobile OAuth] Abriendo sesión para ${provider}...`);
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    const result = await WebBrowser.openAuthSessionAsync(backendOAuthUrl, redirectScheme);
 
     if (result.type !== 'success' || !result.url) {
       if (result.type === 'cancel' || result.type === 'dismiss') {
@@ -161,18 +142,33 @@ export class SocialAuthService {
       throw new Error(`No se pudo completar la autenticación con ${provider}.`);
     }
 
+    console.log(`📱 [Mobile OAuth] URL de retorno capturada:`, result.url);
     const parsed = this.parseUrlParams(result.url);
+
+    if (parsed.token) {
+      let userObj: UserProfile;
+      try {
+        userObj = typeof parsed.user === 'string' ? JSON.parse(decodeURIComponent(parsed.user)) : (parsed.user as any);
+      } catch {
+        userObj = {
+          id: 'user_oauth',
+          email: `${provider.toLowerCase()}@texxxnopor.com`,
+          username: `Usuario_${provider}`,
+          role: 'CONSUMER',
+          isVerified: false,
+        } as any;
+      }
+      return { token: parsed.token, user: userObj };
+    }
+
     const accessToken = parsed.access_token || parsed.accessToken;
     const idToken = parsed.id_token || parsed.idToken;
     const tokenToSend = idToken || accessToken;
 
     if (!tokenToSend && !accessToken) {
-      throw new Error(`No se recibió el token de ${provider}. Verifica la configuración en la consola.`);
+      throw new Error(`No se recibió el token de ${provider}.`);
     }
 
-    console.log(`📱 [Mobile OAuth] Token recibido, verificando en backend...`);
-
-    // Enviar tokens al backend para registrar/autenticar en PostgreSQL
     const res = await api.auth.socialLogin(
       provider,
       undefined,

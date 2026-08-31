@@ -28,12 +28,17 @@ import {
   UserCheck,
   UserPlus,
   Hash,
+  Download,
+  DownloadCloud,
+  Check,
 } from 'lucide-react-native';
 import { HLSVideoPlayer } from '../components/HLSVideoPlayer';
 import { useTheme } from '../context/ThemeContext';
 import { api, VideoItem, CommentItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { VideoOptionsModal } from '../components/VideoOptionsModal';
+import { LiveFloatingReactions } from '../components/LiveFloatingReactions';
+import { offlineStorage } from '../services/offlineStorage';
 
 interface VideoDetailPlayerScreenProps {
   video?: VideoItem;
@@ -78,9 +83,17 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
   const [commentText, setCommentText] = useState('');
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
+
+    // Verificar si ya está descargado offline
+    offlineStorage.isDownloaded(currentVideo.id).then((saved) => {
+      if (isMounted) setIsDownloaded(saved);
+    });
 
     // Registrar en Historial de Reproducción real en PostgreSQL
     if (userToken) {
@@ -113,6 +126,48 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
       isMounted = false;
     };
   }, [currentVideo.id, userToken, user?.id]);
+
+  const handleDownloadVideo = async () => {
+    if (isDownloading) return;
+
+    if (isDownloaded) {
+      Alert.alert(
+        'Video Descargado',
+        'Este video ya se encuentra guardado en tu dispositivo para ver sin conexión. ¿Deseas eliminarlo de tus descargas?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar Descarga',
+            style: 'destructive',
+            onPress: async () => {
+              await offlineStorage.removeDownload(currentVideo.id);
+              setIsDownloaded(false);
+              Alert.alert('Descargas', 'Video eliminado del almacenamiento offline.');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setIsDownloading(true);
+    setDownloadProgress(10);
+    try {
+      await offlineStorage.saveVideo(currentVideo, (p) => {
+        setDownloadProgress(p);
+      });
+      setIsDownloaded(true);
+      Alert.alert(
+        '¡Descarga Completada!',
+        'El video se guardó con éxito en "Mis Descargas Offline" para reproducir en cualquier momento sin internet.'
+      );
+    } catch (err: any) {
+      Alert.alert('Error al descargar', err.message || 'No se pudo completar la descarga.');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
+  };
 
   const handleToggleLike = async () => {
     if (!userToken) {
@@ -323,6 +378,31 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
 
           <TouchableOpacity
             style={styles.actionItem}
+            onPress={handleDownloadVideo}
+            disabled={isDownloading}
+            activeOpacity={0.7}
+          >
+            {isDownloading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : isDownloaded ? (
+              <CheckCircle2 size={22} color="#30D158" />
+            ) : (
+              <Download size={22} color={colors.textPrimary} />
+            )}
+            <Text
+              style={[
+                styles.actionText,
+                { color: colors.textSecondary },
+                isDownloaded && { color: '#30D158', fontWeight: 'bold' },
+                isDownloading && { color: colors.primary },
+              ]}
+            >
+              {isDownloading ? `${downloadProgress}%` : isDownloaded ? 'Descargado' : 'Descargar'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionItem}
             onPress={handleShare}
             activeOpacity={0.7}
           >
@@ -339,6 +419,9 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
             <Text style={[styles.actionText, { color: colors.textSecondary }]}>Más</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 3.5. Reacciones Flotantes en Vivo */}
+        <LiveFloatingReactions videoId={currentVideo.id} />
 
         {/* 4. Tarjeta del Actor / Creador */}
         <TouchableOpacity

@@ -31,13 +31,14 @@ import {
   Bell,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
-import { api, VideoItem } from '../services/api';
+import { api, VideoItem, ActorStoryGroup } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { AuthScreen } from '../navigation/AuthStack';
 import { AccountMenuModal } from '../components/AccountMenuModal';
 import { BrandLogo } from '../components/BrandLogo';
 import { VideoOptionsModal } from '../components/VideoOptionsModal';
 import { NotificationsModal } from '../components/NotificationsModal';
+import { StoriesCarousel } from '../components/StoriesCarousel';
 
 interface HomeScreenProps {
   onSelectVideo?: (video: VideoItem) => void;
@@ -60,8 +61,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [videoList, setVideoList] = useState<VideoItem[]>([]);
+  const [storyGroups, setStoryGroups] = useState<ActorStoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Modal de opciones para videos (3 puntos)
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoItem | null>(null);
@@ -90,25 +95,54 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return () => clearInterval(interval);
   }, [loadUnreadNotifs]);
 
-  const fetchVideos = useCallback(async () => {
+  const fetchStories = useCallback(async () => {
     try {
-      const data = await api.videos.getFeed(userToken);
-      setVideoList(data);
+      const list = await api.stories.getStories(user?.id);
+      setStoryGroups(list);
+    } catch (err) {
+      console.log('Error fetching stories:', err);
+    }
+  }, [user?.id]);
+
+  const fetchVideos = useCallback(async (pageNum: number = 1) => {
+    try {
+      const data = await api.videos.getFeed(userToken, undefined, { page: pageNum, limit: 12 });
+      if (pageNum === 1) {
+        setVideoList(data);
+      } else {
+        setVideoList((prev) => {
+          const existingIds = new Set(prev.map((v) => v.id));
+          const newItems = data.filter((v) => !existingIds.has(v.id));
+          return [...prev, ...newItems];
+        });
+      }
+      setHasMore(data.length >= 12);
+      setPage(pageNum);
     } catch (err) {
       console.log('Error fetching feed:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }, [userToken]);
 
   useEffect(() => {
-    fetchVideos();
-  }, [fetchVideos]);
+    fetchStories();
+    fetchVideos(1);
+  }, [fetchStories, fetchVideos]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchVideos();
+    fetchStories();
+    fetchVideos(1);
+  };
+
+  const loadMoreVideos = () => {
+    if (!loadingMore && !loading && hasMore) {
+      setLoadingMore(true);
+      fetchVideos(page + 1);
+    }
   };
 
   const handleToggleLike = async (item: VideoItem) => {
@@ -436,6 +470,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         onSelectVideo={onSelectVideo}
       />
 
+      {/* 1.5. Carrusel de Historias Efímeras (Stories 24h) */}
+      <StoriesCarousel
+        storyGroups={storyGroups}
+        onRefreshStories={fetchStories}
+        onViewActor={onViewActor}
+      />
+
       {/* 2. Categorías / Chips de Posicionamiento */}
       <View style={[styles.categoriesContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <ScrollView
@@ -497,6 +538,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               tintColor={colors.primary}
               colors={[colors.primary]}
             />
+          }
+          onEndReached={loadMoreVideos}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>Cargando más videos...</Text>
+              </View>
+            ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>

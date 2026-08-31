@@ -19,6 +19,27 @@ export interface SubscriptionItem {
   isFollowed: boolean;
 }
 
+export interface StorySlide {
+  id: string;
+  mediaUrl: string;
+  mediaType: 'IMAGE' | 'VIDEO';
+  caption?: string;
+  viewsCount?: number;
+  createdAt: string;
+  expiresAt: string;
+  isSeen?: boolean;
+}
+
+export interface ActorStoryGroup {
+  actorId: string;
+  actorName: string;
+  actorAvatar: string;
+  isVerified?: boolean;
+  hasUnseen: boolean;
+  stories: StorySlide[];
+  latestCreatedAt: string;
+}
+
 // URL de producción alojada en la nube de Render (24/7 con PC apagado)
 const getApiBaseUrl = (): string => {
   return 'https://texxxnopor-backend.onrender.com';
@@ -310,13 +331,35 @@ export const api = {
 
     async updateProfile(
       token: string,
-      data: { username?: string; avatarUrl?: string | null }
+      data: { username?: string; avatarUrl?: string | null; bio?: string; stageName?: string }
     ): Promise<{ user: UserProfile } | null> {
       return await apiFetch<{ user: UserProfile }>('/api/user/profile', {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
         body: JSON.stringify(data),
       });
+    },
+
+    async upgradeToActor(
+      token: string,
+      data: {
+        stageName?: string;
+        bio?: string;
+        nationality?: string;
+        paymentMethod?: string;
+        bankName?: string;
+        customerEmail?: string;
+      }
+    ): Promise<{ status: string; message: string; user: UserProfile; actor: any; transaction: any } | null> {
+      return await apiFetch<{ status: string; message: string; user: UserProfile; actor: any; transaction: any }>(
+        '/api/user/upgrade-to-actor',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(data),
+          throwOnError: true,
+        }
+      );
     },
   },
 
@@ -324,11 +367,18 @@ export const api = {
   // 3. CRUD DE ACTORES / ACTRICES (POSTGRESQL + CLOUDINARY)
   // ====================================================
   actors: {
-    async getActors(userId?: string): Promise<ActorItem[]> {
-      const query = userId ? `?userId=${userId}` : '';
-      const res = await apiFetch<{ actors: ActorItem[] }>(`/api/actors${query}`);
+    async getActors(userId?: string, page?: number, limit?: number): Promise<ActorItem[]> {
+      const params = new URLSearchParams();
+      if (userId) params.append('userId', userId);
+      if (page) params.append('page', String(page));
+      if (limit) params.append('limit', String(limit));
+
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await apiFetch<{ actors: ActorItem[]; pagination?: any }>(`/api/actors${qs}`);
       if (res && Array.isArray(res.actors)) {
-        localActors = res.actors;
+        if (!page || page === 1) {
+          localActors = res.actors;
+        }
         return res.actors;
       }
       return [...localActors];
@@ -497,13 +547,63 @@ export const api = {
   },
 
   // ====================================================
+  // 3.5. HISTORIAS EFÍMERAS DE ACTORES (STORIES 24H)
+  // ====================================================
+  stories: {
+    async getStories(userId?: string): Promise<ActorStoryGroup[]> {
+      const query = userId ? `?userId=${userId}` : '';
+      const res = await apiFetch<{ stories: ActorStoryGroup[] }>(`/api/stories${query}`);
+      if (res && Array.isArray(res.stories)) {
+        return res.stories;
+      }
+      return [];
+    },
+
+    async createStory(
+      token: string,
+      data: { mediaUrl: string; mediaType?: 'IMAGE' | 'VIDEO'; caption?: string; actorId?: string }
+    ): Promise<{ status: string; story: any }> {
+      return await apiFetch<{ status: string; story: any }>('/api/stories', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+    },
+
+    async markSeen(storyId: string, userId?: string): Promise<boolean> {
+      try {
+        await apiFetch(`/api/stories/${storyId}/view`, {
+          method: 'POST',
+          body: JSON.stringify({ userId }),
+        });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+
+    async sendReaction(token: string, storyId: string, reaction: string): Promise<boolean> {
+      try {
+        await apiFetch(`/api/stories/${storyId}/react`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ reaction }),
+        });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+  },
+
+  // ====================================================
   // 4. CRUD DE VIDEOS Y POSICIONAMIENTO POR CATEGORÍAS/TAGS
   // ====================================================
   videos: {
     async getFeed(
       token?: string | null,
       userId?: string,
-      filters?: { category?: string; query?: string; tag?: string }
+      filters?: { category?: string; query?: string; tag?: string; page?: number; limit?: number }
     ): Promise<VideoItem[]> {
       const params = new URLSearchParams();
       if (userId) params.append('userId', userId);
@@ -512,14 +612,18 @@ export const api = {
       }
       if (filters?.query) params.append('q', filters.query);
       if (filters?.tag) params.append('tag', filters.tag);
+      if (filters?.page) params.append('page', String(filters.page));
+      if (filters?.limit) params.append('limit', String(filters.limit));
 
       const qs = params.toString() ? `?${params.toString()}` : '';
-      const res = await apiFetch<{ videos: VideoItem[] }>(`/api/videos${qs}`, {
+      const res = await apiFetch<{ videos: VideoItem[]; pagination?: any }>(`/api/videos${qs}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (res && Array.isArray(res.videos)) {
-        localVideos = res.videos;
+        if (!filters?.page || filters.page === 1) {
+          localVideos = res.videos;
+        }
         return res.videos;
       }
       return [...localVideos];
@@ -661,6 +765,34 @@ export const api = {
         return { isLiked: vid.isLiked, likesCount: vid.likesCount };
       }
       return { isLiked: true, likesCount: 1 };
+    },
+
+    async sendReaction(
+      videoId: string,
+      emoji: string,
+      userId?: string
+    ): Promise<{ status: string; emoji: string; reactions: Record<string, number> }> {
+      const res = await apiFetch<{ status: string; emoji: string; reactions: Record<string, number> }>(
+        `/api/videos/${videoId}/react`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ emoji, userId }),
+        }
+      );
+      if (res && res.reactions) return res;
+      return {
+        status: 'success',
+        emoji,
+        reactions: { '🔥': 150, '💋': 90, '🔞': 280, '✨': 100, '❤️': 165, '💦': 125 },
+      };
+    },
+
+    async getReactions(videoId: string): Promise<Record<string, number>> {
+      const res = await apiFetch<{ status: string; reactions: Record<string, number> }>(
+        `/api/videos/${videoId}/reactions`
+      );
+      if (res && res.reactions) return res.reactions;
+      return { '🔥': 145, '💋': 88, '🔞': 270, '✨': 95, '❤️': 160, '💦': 120 };
     },
 
     async toggleWatchLater(token: string, videoId: string): Promise<{ isSaved: boolean; message: string }> {
@@ -997,6 +1129,36 @@ export const api = {
 
       localUsers = localUsers.filter((u) => u.id !== userId);
       return res ? true : false;
+    },
+
+    async getAnalytics(token: string): Promise<{
+      totalUsers: number;
+      premiumUsersCount: number;
+      creatorsCount: number;
+      totalVideos: number;
+      totalViews: number;
+      totalLikes: number;
+      totalComments: number;
+      totalCategories: number;
+      totalRevenueCOP: number;
+      revenueFormatted: string;
+      premiumUsers: {
+        id: string;
+        username: string;
+        email: string;
+        role: string;
+        avatarUrl?: string;
+        isVerified: boolean;
+        joinedDate: string;
+      }[];
+      charts: {
+        viewsTrend: { label: string; views: number }[];
+        userGrowth: { label: string; users: number }[];
+      };
+    } | null> {
+      return await apiFetch<any>('/api/admin/analytics', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
     },
   },
 

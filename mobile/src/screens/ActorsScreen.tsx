@@ -70,6 +70,9 @@ export const ActorsScreen: React.FC<ActorsScreenProps> = ({ onSelectVideo }) => 
   const [actorsList, setActorsList] = useState<ActorItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedActor, setSelectedActor] = useState<ActorFullProfile | null>(null);
   const [loadingActorDetails, setLoadingActorDetails] = useState(false);
@@ -100,27 +103,45 @@ export const ActorsScreen: React.FC<ActorsScreenProps> = ({ onSelectVideo }) => 
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const fetchActors = useCallback(async () => {
+  const fetchActors = useCallback(async (pageNum: number = 1) => {
     try {
-      const list = await api.actors.getActors(user?.id);
-      setActorsList(list);
+      const list = await api.actors.getActors(user?.id, pageNum, 12);
+      if (pageNum === 1) {
+        setActorsList(list);
+      } else {
+        setActorsList((prev) => {
+          const existing = new Set(prev.map((a) => a.id));
+          const fresh = list.filter((a) => !existing.has(a.id));
+          return [...prev, ...fresh];
+        });
+      }
+      setHasMore(list.length >= 12);
+      setPage(pageNum);
       const followed = new Set<string>(list.filter((a) => a.isFollowing).map((a) => a.id));
-      setFollowedActorIds(followed);
+      setFollowedActorIds((prev) => new Set([...prev, ...followed]));
     } catch (err) {
       console.log('Error fetching actors:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    fetchActors();
+    fetchActors(1);
   }, [fetchActors]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchActors();
+    fetchActors(1);
+  };
+
+  const loadMoreActors = () => {
+    if (!loadingMore && !loading && hasMore) {
+      setLoadingMore(true);
+      fetchActors(page + 1);
+    }
   };
 
   const handleOpenActorProfile = async (actor: ActorItem) => {
@@ -382,6 +403,16 @@ export const ActorsScreen: React.FC<ActorsScreenProps> = ({ onSelectVideo }) => 
                 </View>
               </TouchableOpacity>
             )}
+            onEndReached={loadMoreActors}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>Cargando más actrices...</Text>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={{ alignItems: 'center', marginTop: 60 }}>
                 <Sparkles color={colors.textMuted} size={40} />

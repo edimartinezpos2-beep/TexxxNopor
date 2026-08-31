@@ -1048,52 +1048,222 @@ const AdminUsersScreen: React.FC = () => {
 };
 
 // ====================================================
-// 4. PESTAÑA CLOUDINARY & ANALÍTICAS
+// 4. PESTAÑA ANALÍTICAS AVANZADAS Y SUSCRIPTORES VIP RED
 // ====================================================
-const AdminCloudinaryStatsScreen: React.FC<{ onSwitchToSpectator?: () => void }> = ({
+const AdminAnalyticsScreen: React.FC<{ onSwitchToSpectator?: () => void }> = ({
   onSwitchToSpectator,
-}) => (
-  <ScrollView style={styles.screenContainer} showsVerticalScrollIndicator={false}>
-    <Text style={styles.headerTitle}>Almacenamiento Cloudinary & CDN</Text>
-    <Text style={styles.subtitle}>Estado de la infraestructura en la nube y transmisión de video</Text>
+}) => {
+  const { userToken } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [activeSubTab, setActiveSubTab] = useState<'METRICS' | 'VIP_USERS'>('METRICS');
 
-    <View style={styles.statsGrid}>
-      <View style={styles.statBox}>
-        <Text style={styles.statNumber}>100%</Text>
-        <Text style={styles.statLabel}>Cloudinary Secure URLs</Text>
-      </View>
-      <View style={styles.statBox}>
-        <Text style={styles.statNumber}>HLS / 4K</Text>
-        <Text style={styles.statLabel}>Transmisión Adaptativa</Text>
-      </View>
-      <View style={styles.statBox}>
-        <Text style={styles.statNumber}>200 MB</Text>
-        <Text style={styles.statLabel}>Límite por Video</Text>
-      </View>
-      <View style={styles.statBox}>
-        <Text style={styles.statNumber}>99.9%</Text>
-        <Text style={styles.statLabel}>Disponibilidad Global</Text>
-      </View>
-    </View>
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (userToken) {
+        const data = await api.admin.getAnalytics(userToken);
+        if (data) setAnalytics(data);
+      }
+    } catch (err) {
+      console.warn('Error fetching analytics:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [userToken]);
 
-    <View style={[styles.crudCard, { marginTop: 16, flexDirection: 'column', alignItems: 'flex-start' }]}>
-      <Text style={[styles.crudTitle, { fontSize: 16 }]}>🛡️ Reglas de Seguridad y Validación</Text>
-      <Text style={[styles.crudMeta, { marginTop: 6, lineHeight: 18 }]}>
-        • Tipos MIME validados: MP4, MOV, WEBM, M4V{'\n'}
-        • Timeout de subida: 60 segundos con AbortController{'\n'}
-        • Limpieza automática en Cloudinary al borrar videos y fotos de actores{'\n'}
-        • Roles estrictos: Espectador (solo lectura), Admin (CRUD completo)
-      </Text>
-    </View>
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
-    {onSwitchToSpectator && (
-      <TouchableOpacity style={styles.switchViewerBtn} onPress={onSwitchToSpectator}>
-        <Eye size={18} color="#000000" style={{ marginRight: 6 }} />
-        <Text style={styles.switchViewerBtnText}>Ver plataforma como Espectador</Text>
-      </TouchableOpacity>
-    )}
-  </ScrollView>
-);
+  return (
+    <ScrollView style={styles.screenContainer} showsVerticalScrollIndicator={false}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.headerTitle}>Panel de Analíticas & VIP RED</Text>
+          <Text style={styles.subtitle}>Métricas globales en tiempo real e ingresos COP</Text>
+        </View>
+        <TouchableOpacity style={styles.refreshBtn} onPress={fetchAnalytics} activeOpacity={0.7}>
+          <RefreshCw size={16} color={COLORS.neonLime} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Selector de Pestaña */}
+      <View style={styles.subTabSelector}>
+        <TouchableOpacity
+          style={[styles.subTabBtn, activeSubTab === 'METRICS' && styles.subTabBtnActive]}
+          onPress={() => setActiveSubTab('METRICS')}
+        >
+          <BarChart3 size={16} color={activeSubTab === 'METRICS' ? '#000000' : '#8E8E93'} />
+          <Text style={[styles.subTabBtnText, activeSubTab === 'METRICS' && styles.subTabBtnTextActive]}>
+            Métricas & Gráficas
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.subTabBtn, activeSubTab === 'VIP_USERS' && styles.subTabBtnActive]}
+          onPress={() => setActiveSubTab('VIP_USERS')}
+        >
+          <Crown size={16} color={activeSubTab === 'VIP_USERS' ? '#000000' : '#FFD700'} />
+          <Text style={[styles.subTabBtnText, activeSubTab === 'VIP_USERS' && styles.subTabBtnTextActive]}>
+            Suscriptores VIP ({analytics?.premiumUsersCount || 0})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={COLORS.neonLime} />
+          <Text style={{ color: '#8E8E93', marginTop: 10 }}>Cargando analíticas en vivo...</Text>
+        </View>
+      ) : activeSubTab === 'METRICS' ? (
+        <>
+          {/* Tarjetas Principales de Métricas */}
+          <View style={styles.statsGrid}>
+            <View style={styles.statBox}>
+              <Text style={[styles.statNumber, { color: '#0084FF' }]}>
+                {analytics?.totalUsers ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Usuarios Totales</Text>
+            </View>
+
+            <View style={[styles.statBox, { borderColor: '#FF2D55', borderWidth: 1 }]}>
+              <Text style={[styles.statNumber, { color: '#FF2D55' }]}>
+                {analytics?.premiumUsersCount ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Suscriptores VIP RED</Text>
+            </View>
+
+            <View style={styles.statBox}>
+              <Text style={[styles.statNumber, { color: '#FF9500' }]}>
+                {analytics?.creatorsCount ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Actores / Creadores</Text>
+            </View>
+
+            <View style={styles.statBox}>
+              <Text style={[styles.statNumber, { color: COLORS.neonLime }]}>
+                {analytics?.totalVideos ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Videos Publicados</Text>
+            </View>
+          </View>
+
+          {/* Tarjeta de Facturación Estimada en COP */}
+          <View style={styles.revenueCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <DollarSign size={22} color={COLORS.neonLime} />
+              <Text style={styles.revenueTitle}>Facturación Estimada</Text>
+            </View>
+            <Text style={styles.revenueAmount}>{analytics?.revenueFormatted || '$0 COP'}</Text>
+            <Text style={styles.revenueBreakdown}>
+              • Planes VIP RED ($10.000 COP): {analytics?.premiumUsersCount || 0} activos{'\n'}
+              • Ascensos a Creador ($5.000 COP): {analytics?.creatorsCount || 0} cuentas
+            </Text>
+          </View>
+
+          {/* Gráfica de Vistas Semanales */}
+          <View style={styles.chartContainer}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <TrendingUp size={18} color={COLORS.neonLime} />
+              <Text style={styles.chartTitle}>Tendencia de Reproducciones Semanales</Text>
+            </View>
+            <View style={styles.barChartRow}>
+              {(analytics?.charts?.viewsTrend || [
+                { label: 'Lun', views: 10 },
+                { label: 'Mar', views: 18 },
+                { label: 'Mie', views: 15 },
+                { label: 'Jue', views: 25 },
+                { label: 'Vie', views: 32 },
+                { label: 'Sab', views: 45 },
+                { label: 'Dom', views: 40 },
+              ]).map((item: any, idx: number) => {
+                const maxVal = Math.max(...(analytics?.charts?.viewsTrend?.map((v: any) => v.views) || [50]));
+                const barHeight = Math.max(15, Math.min(100, Math.round((item.views / (maxVal || 1)) * 90)));
+                return (
+                  <View key={idx} style={styles.barColumn}>
+                    <Text style={styles.barValueText}>{item.views}</Text>
+                    <View style={[styles.barVisual, { height: barHeight, backgroundColor: idx === 5 ? '#FF2D55' : COLORS.neonLime }]} />
+                    <Text style={styles.barLabelText}>{item.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Gráfica de Crecimiento de Usuarios */}
+          <View style={[styles.chartContainer, { marginTop: 14 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <Users size={18} color="#0084FF" />
+              <Text style={styles.chartTitle}>Crecimiento de Nuevos Registros</Text>
+            </View>
+            <View style={styles.barChartRow}>
+              {(analytics?.charts?.userGrowth || [
+                { label: 'Sem 1', users: 2 },
+                { label: 'Sem 2', users: 5 },
+                { label: 'Sem 3', users: 8 },
+                { label: 'Sem 4', users: 12 },
+              ]).map((item: any, idx: number) => {
+                const maxVal = Math.max(...(analytics?.charts?.userGrowth?.map((u: any) => u.users) || [15]));
+                const barHeight = Math.max(15, Math.min(100, Math.round((item.users / (maxVal || 1)) * 90)));
+                return (
+                  <View key={idx} style={styles.barColumn}>
+                    <Text style={styles.barValueText}>{item.users}</Text>
+                    <View style={[styles.barVisual, { height: barHeight, backgroundColor: '#0084FF' }]} />
+                    <Text style={styles.barLabelText}>{item.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </>
+      ) : (
+        /* Lista de Suscriptores VIP RED / Premium */
+        <View style={{ marginTop: 10 }}>
+          {(!analytics?.premiumUsers || analytics.premiumUsers.length === 0) ? (
+            <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+              <Crown size={40} color="#FFD700" style={{ marginBottom: 10 }} />
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' }}>Sin Suscriptores VIP Aún</Text>
+              <Text style={{ color: '#8E8E93', fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+                Cuando los usuarios paguen $10.000 COP por Wompi aparecerán listados aquí.
+              </Text>
+            </View>
+          ) : (
+            analytics.premiumUsers.map((vipUser: any) => (
+              <View key={vipUser.id} style={styles.vipUserCard}>
+                <Image
+                  source={{
+                    uri: vipUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop',
+                  }}
+                  style={styles.vipAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.vipUsername}>@{vipUser.username}</Text>
+                    <View style={styles.vipBadgePill}>
+                      <Crown size={10} color="#FFD700" />
+                      <Text style={styles.vipBadgeText}>VIP RED</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.vipEmail}>{vipUser.email}</Text>
+                  <Text style={styles.vipDate}>Suscrito el: {vipUser.joinedDate || 'Reciente'}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+
+      {onSwitchToSpectator && (
+        <TouchableOpacity style={styles.switchViewerBtn} onPress={onSwitchToSpectator}>
+          <Eye size={18} color="#000000" style={{ marginRight: 6 }} />
+          <Text style={styles.switchViewerBtnText}>Ver plataforma como Espectador</Text>
+        </TouchableOpacity>
+      )}
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+};
 
 // ====================================================
 // NAVEGADOR PRINCIPAL DE ADMINISTRACIÓN
@@ -1146,12 +1316,12 @@ export const AdminNavigator: React.FC<{ onLogout: () => void; onSwitchToSpectato
         }}
       />
       <Tab.Screen
-        name="Cloudinary"
+        name="Analíticas"
         options={{
           tabBarIcon: ({ color, size }) => <BarChart3 size={size} color={color} />,
         }}
       >
-        {() => <AdminCloudinaryStatsScreen onSwitchToSpectator={onSwitchToSpectator} />}
+        {() => <AdminAnalyticsScreen onSwitchToSpectator={onSwitchToSpectator} />}
       </Tab.Screen>
     </Tab.Navigator>
   );
@@ -1417,5 +1587,155 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  refreshBtn: {
+    padding: 8,
+    backgroundColor: '#16161A',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#24242C',
+  },
+  subTabSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#16161A',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#24242C',
+  },
+  subTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  subTabBtnActive: {
+    backgroundColor: COLORS.neonLime,
+  },
+  subTabBtnText: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  subTabBtnTextActive: {
+    color: '#000000',
+    fontWeight: 'bold',
+  },
+  revenueCard: {
+    backgroundColor: '#16161A',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#30D158',
+  },
+  revenueTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  revenueAmount: {
+    color: '#30D158',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginVertical: 4,
+  },
+  revenueBreakdown: {
+    color: '#8E8E93',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  chartContainer: {
+    backgroundColor: '#16161A',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#24242C',
+  },
+  chartTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  barChartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 120,
+    paddingTop: 10,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  barValueText: {
+    color: '#8E8E93',
+    fontSize: 9,
+    marginBottom: 4,
+  },
+  barVisual: {
+    width: 14,
+    borderRadius: 4,
+    minHeight: 10,
+  },
+  barLabelText: {
+    color: '#CCCCCC',
+    fontSize: 10,
+    marginTop: 6,
+  },
+  vipUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16161A',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  vipAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+    borderWidth: 1.5,
+    borderColor: '#FFD700',
+  },
+  vipUsername: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  vipBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  vipBadgeText: {
+    color: '#FFD700',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  vipEmail: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  vipDate: {
+    color: '#CCCCCC',
+    fontSize: 10,
+    marginTop: 2,
   },
 });
