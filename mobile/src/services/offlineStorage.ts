@@ -26,6 +26,7 @@ let offlineDownloadsStore: DownloadedVideoItem[] = [
     downloadedAt: new Date().toLocaleDateString('es-CO'),
     fileSizeFormatted: '48.5 MB',
     isOfflineAvailable: true,
+    isNew: false,
   },
 ];
 

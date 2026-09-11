@@ -59,6 +59,7 @@ import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import { PremiumGatewayModal } from './PremiumGatewayModal';
 import { OfflineDownloadsModal } from './OfflineDownloadsModal';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.88, 380);
@@ -91,6 +92,7 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
   const [currentView, setCurrentView] = useState<ActiveSubView>('MENU');
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
 
   // Estados de Configuración de UI (conforme a la imagen)
   const [currency, setCurrency] = useState<'COP' | 'USD' | 'EUR' | 'MXN'>('COP');
@@ -627,6 +629,19 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
                     thumbColor="#FFFFFF"
                   />
                 </View>
+
+                {/* 🛡️ Política de Privacidad */}
+                <TouchableOpacity
+                  style={styles.menuItemRow}
+                  onPress={() => setShowPrivacyPolicy(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <ShieldCheck size={18} color="#05D9E8" />
+                    <Text style={styles.menuItemLabel}>Política de Privacidad y Datos (+18)</Text>
+                  </View>
+                  <ChevronRight size={16} color="#666670" />
+                </TouchableOpacity>
               </View>
 
               {/* Botón de Cerrar Sesión */}
@@ -928,6 +943,12 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
           onClose();
           if (onSelectVideo) onSelectVideo(video);
         }}
+      />
+
+      {/* MODAL DE POLÍTICA DE PRIVACIDAD */}
+      <PrivacyPolicyModal
+        visible={showPrivacyPolicy}
+        onClose={() => setShowPrivacyPolicy(false)}
       />
     </Modal>
   );

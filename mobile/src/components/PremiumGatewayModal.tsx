@@ -35,6 +35,7 @@ import {
   Smartphone,
   Receipt,
   ArrowRight,
+  Banknote,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -238,7 +239,7 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
   const handleConfirmVerification = async () => {
     setIsVerifying(true);
     try {
-      const selectedPlanObj = PLANS_COP.find((p) => p.id === selectedPlan) || PLANS_COP[0];
+      const selectedPlanObj = plans.find((p) => p.id === selectedPlan) || plans[0];
       const bankTitle =
         paymentMethod === 'PSE'
           ? selectedBank
@@ -248,32 +249,27 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
           ? 'Tarjeta Débito/Crédito'
           : 'Efecty / Baloto';
 
-      if (userToken) {
-        // Registrar suscripción y persistir estado VIP en PostgreSQL
-        await api.user.subscribePremium(userToken, {
-          plan: selectedPlan,
-          paymentMethod,
-          amount: selectedPlanObj.amount,
-          currency: 'COP',
-          bankName: bankTitle,
-          psePersonType: personType,
-          documentType,
-          documentNumber,
-          phoneNumber: nequiPhone,
-          customerEmail: pseEmail || user?.email,
-        });
+      if (!userToken) {
+        Alert.alert('Sesión requerida', 'Debes tener una sesión activa para verificar tu suscripción.');
+        return;
+      }
 
+      // 🛡️ ANTI-FALSIFICACIÓN: Consultar a la base de datos el estado confirmado por el Webhook de Wompi
+      const subStatus = await api.user.getSubscriptionStatus(userToken);
+
+      if (subStatus && subStatus.isVip) {
+        // La base de datos confirmó el pago verificado por Wompi
         if (updateUser) {
           updateUser({ isVerified: true });
         }
 
-        const generatedTxId = `TX-WMP-${Math.floor(10000000 + Math.random() * 90000000)}`;
+        const confirmedTxId = subStatus.lastPaymentRef || `TX-WMP-${Date.now().toString().slice(-8)}`;
         const generatedAuthCode = `AUT-WMP-${Math.floor(100000 + Math.random() * 900000)}`;
 
         setTransactionData({
-          id: generatedTxId,
+          id: confirmedTxId,
           authCode: generatedAuthCode,
-          bankName: `${bankTitle} · Wompi`,
+          bankName: `${bankTitle} · Wompi Bancolombia`,
           amountFormatted: selectedPlanObj.price,
           date: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
         });
@@ -281,9 +277,16 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
         setIsWaitingVerification(false);
         setIsSuccess(true);
         if (onSuccess) onSuccess();
+      } else {
+        // El Webhook de Wompi aún no ha notificado la aprobación o el usuario no ha completado el pago
+        Alert.alert(
+          'Esperando Confirmación de Wompi',
+          'Los servidores de Wompi están procesando la transacción bancaria. En cuanto tu banco apruebe el débito, el Webhook activará automáticamente tu cuenta VIP.\n\nSi ya completaste la transferencia, por favor espera 10-15 segundos y presiona nuevamente "Comprobar Estado".',
+          [{ text: 'Entendido' }]
+        );
       }
     } catch (err: any) {
-      Alert.alert('Verificación de Pago', err.message || 'No se pudo verificar el pago en este momento. Si acabas de transferir, espera un momento e intenta de nuevo.');
+      Alert.alert('Verificación de Pago', err.message || 'No se pudo verificar el estado en este momento. Intenta de nuevo.');
     } finally {
       setIsVerifying(false);
     }

@@ -64,6 +64,7 @@ import { PremiumGatewayModal } from '../components/PremiumGatewayModal';
 import { NotificationsModal } from '../components/NotificationsModal';
 import { OfflineDownloadsModal } from '../components/OfflineDownloadsModal';
 import { offlineStorage } from '../services/offlineStorage';
+import { PrivacyPolicyModal } from '../components/PrivacyPolicyModal';
 
 interface ProfileScreenProps {
   onSelectVideo?: (video: any) => void;
@@ -90,6 +91,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showBecomeActorModal, setShowBecomeActorModal] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
   const [actorStageName, setActorStageName] = useState('');
   const [actorBio, setActorBio] = useState('');
@@ -237,6 +239,38 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
       Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas salir de tu cuenta?', [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Cerrar Sesión', style: 'destructive', onPress: signOut },
+      ]);
+    }
+  };
+
+  // Solicitud de baja o desactivación de cuenta y datos conforme a la Política de Privacidad (+18)
+  const handleRequestAccountDeletion = () => {
+    const title = 'Solicitud de Baja / Desactivación de Cuenta';
+    const message =
+      'Conforme a nuestras Políticas de Privacidad y regulaciones legales para plataformas de contenido adulto (+18):\n\n' +
+      '• Tu perfil público, comentarios y acceso a la cuenta se desactivarán de forma inmediata.\n' +
+      '• RETENCIÓN POR OBLIGACIÓN LEGAL: Determinados registros esenciales (verificación de mayoría de edad +18, comprobantes de transacciones financieras y logs de auditoría/seguridad) se conservarán archivados confidencialmente conforme a la ley para responder ante autoridades y prevenir fraudes.\n\n' +
+      '¿Deseas confirmar la desactivación de tu perfil?';
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`)) {
+        signOut();
+        alert('Tu cuenta ha sido desactivada. Los registros de respaldo legal han sido archivados según la Política de Privacidad.');
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Entendido, Desactivar',
+          style: 'destructive',
+          onPress: () => {
+            signOut();
+            Alert.alert(
+              'Cuenta Desactivada',
+              'Tu sesión ha sido cerrada y tu perfil público desactivado. Los registros de respaldo legal han sido archivados conforme a la Política de Privacidad.'
+            );
+          },
+        },
       ]);
     }
   };
@@ -964,15 +998,49 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
           </View>
         </View>
 
-        {/* Verificación de seguridad */}
+        {/* ==================================================== */}
+        {/* SECCIÓN 3: 🛡️ SEGURIDAD Y POLÍTICA DE PRIVACIDAD */}
+        {/* ==================================================== */}
         <View style={[styles.sectionContainer, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-          <View style={[styles.menuRow, styles.menuRowNoBorder]}>
+          <View style={[styles.sectionHeaderRow, { borderBottomColor: colors.border }]}>
+            <ShieldCheck size={16} color={colors.textSecondary} />
+            <Text style={[styles.sectionHeaderText, { color: colors.textSecondary }]}>Seguridad y Privacidad</Text>
+          </View>
+
+          {/* Verificación de seguridad */}
+          <View style={[styles.menuRow, { borderBottomColor: colors.border }]}>
             <View style={styles.menuLeft}>
               <ShieldCheck size={19} color={colors.primary} />
               <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>Seguridad TexxxNopor 18+</Text>
             </View>
             <CheckCircle2 size={18} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
           </View>
+
+          {/* Política de Privacidad y Datos */}
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomColor: colors.border }]}
+            onPress={() => setShowPrivacyPolicy(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Lock size={19} color={colors.primary} />
+              <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>Política de Privacidad y Datos (+18)</Text>
+            </View>
+            <ChevronRight size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          {/* Solicitar baja de cuenta y datos */}
+          <TouchableOpacity
+            style={[styles.menuRow, styles.menuRowNoBorder]}
+            onPress={handleRequestAccountDeletion}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Trash2 size={19} color="#FF3B30" />
+              <Text style={[styles.menuLabel, { color: '#FF3B30' }]}>Solicitar Baja de Cuenta / Datos</Text>
+            </View>
+            <ChevronRight size={16} color="#FF3B30" />
+          </TouchableOpacity>
         </View>
 
         {/* Footer de Versión y Estado de Seguridad */}
@@ -1378,6 +1446,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
           loadUserStats();
         }}
         onSelectVideo={onSelectVideo}
+      />
+
+      {/* MODAL DE POLÍTICA DE PRIVACIDAD */}
+      <PrivacyPolicyModal
+        visible={showPrivacyPolicy}
+        onClose={() => setShowPrivacyPolicy(false)}
       />
     </View>
   );

@@ -30,6 +30,7 @@ import {
   Scan,
   Maximize,
   Tv,
+  RotateCcw,
 } from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
@@ -84,19 +85,21 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const hideControlsTimer = useRef<NodeJS.Timeout | null>(null);
   const feedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Helper para asegurar protocolo seguro HTTPS y fuente confiable
+  // Helper para asegurar protocolo seguro HTTPS y URL bien formada
   const resolveSafeVideoUri = (url?: string, hls?: string): string => {
     let primary = url || hls || '';
     if (!primary || primary.trim() === '') {
-      return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      return '';
     }
-    // Convertir http:// a https:// para evitar bloqueos en Android
-    if (primary.startsWith('http://texxxnopor-backend.onrender.com')) {
-      primary = primary.replace('http://', 'https://');
+
+    // ► Si es una URL relativa del backend (/uploads/...) → anteponer el host de Render
+    if (primary.startsWith('/')) {
+      primary = `https://texxxnopor-backend.onrender.com${primary}`;
     }
-    if (primary.startsWith('http://res.cloudinary.com')) {
-      primary = primary.replace('http://', 'https://');
-    }
+
+    // ► Convertir siempre http:// → https://
+    primary = primary.replace(/^http:\/\//i, 'https://');
+
     return primary;
   };
 
@@ -127,7 +130,8 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    setCurrentSource(resolveSafeVideoUri(videoUrl, hlsMasterUrl));
+    const newSource = resolveSafeVideoUri(videoUrl, hlsMasterUrl);
+    setCurrentSource(newSource);
     setCurrentTime(0);
     setHasError(false);
     resetHideControlsTimer();
@@ -175,18 +179,20 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) {
       if ('error' in status && status.error) {
-        console.log(`[Player Status] Error reproduciendo ${currentSource}:`, status.error);
-        // Fallback automático si falla el stream HLS a MP4 CDN
-        const fallbackCdn = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-        if (currentSource !== fallbackCdn) {
-          if (videoUrl && currentSource !== resolveSafeVideoUri(videoUrl)) {
-            setCurrentSource(resolveSafeVideoUri(videoUrl));
-          } else {
-            setCurrentSource(fallbackCdn);
+        console.warn(`[Player Status] Error reproduciendo ${currentSource}:`, status.error);
+        // Si falló el stream principal y tenemos una URL secundaria legítima del video (ej. hls vs videoUrl direct)
+        const primary = resolveSafeVideoUri(videoUrl);
+        const secondary = resolveSafeVideoUri(hlsMasterUrl);
+        if (primary && secondary && primary !== secondary) {
+          if (currentSource === secondary) {
+            setCurrentSource(primary);
+            return;
+          } else if (currentSource === primary) {
+            setCurrentSource(secondary);
+            return;
           }
-        } else {
-          setHasError(true);
         }
+        setHasError(true);
       }
       return;
     }
@@ -401,19 +407,24 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
             </View>
           )}
 
-          {/* Error Fallback con botón de reintentar */}
+          {/* Error Fallback con botón de reintentar el video real */}
           {hasError && (
             <View style={styles.centerOverlay}>
               <AlertCircle size={40} color="#FF3B30" />
-              <Text style={styles.errorText}>No se pudo reproducir este formato de video</Text>
+              <Text style={styles.errorText}>No se pudo cargar el video. Verifica tu conexión.</Text>
               <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => {
+                style={[styles.retryBtn, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                onPress={async () => {
                   setHasError(false);
-                  setCurrentSource('https://vjs.zencdn.net/v/oceans.mp4');
+                  const validSource = resolveSafeVideoUri(videoUrl, hlsMasterUrl);
+                  setCurrentSource(validSource);
+                  try {
+                    await videoRef.current?.replayAsync();
+                  } catch (_) {}
                 }}
               >
-                <Text style={styles.retryBtnText}>Reintentar con Stream Seguro</Text>
+                <RotateCcw size={14} color="#FFFFFF" />
+                <Text style={styles.retryBtnText}>Reintentar Reproducción</Text>
               </TouchableOpacity>
             </View>
           )}

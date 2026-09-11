@@ -43,12 +43,12 @@ export const LiveFloatingReactions: React.FC<LiveFloatingReactionsProps> = ({
   const { user, userToken } = useAuth();
   const [particles, setParticles] = useState<Particle[]>([]);
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({
-    '🔥': 145,
-    '💋': 88,
-    '🔞': 270,
-    '✨': 95,
-    '❤️': 160,
-    '💦': 120,
+    '🔥': 0,
+    '💋': 0,
+    '🔞': 0,
+    '✨': 0,
+    '❤️': 0,
+    '💦': 0,
   });
 
   // Cargar conteo inicial de reacciones

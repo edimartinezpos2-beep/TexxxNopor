@@ -41,6 +41,10 @@ model User {
   age           Int?
   authProvider  String?        @default("LOCAL") // LOCAL, GOOGLE, FACEBOOK
   isVerified    Boolean        @default(false)
+  isVip         Boolean        @default(false)
+  vipExpiresAt  DateTime?
+  subscriptionPlan String?
+  lastPaymentRef   String?
   avatarUrl          String?
   resetPasswordCode  String?
   resetCodeExpiresAt DateTime?
@@ -146,6 +150,7 @@ model Video {
   retentionStats  VideoRetentionStat[]
   comments        Comment[]
   playlistItems   PlaylistItem[]
+  reactions       VideoReaction[]
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -385,5 +390,39 @@ model StoryView {
   createdAt DateTime @default(now())
 
   @@unique([storyId, userId])
+}
+
+// ====================================================
+// REACCIONES FLOTANTES EN VIVO (CONTADOR PERSISTENTE)
+// ====================================================
+model VideoReaction {
+  id        String   @id @default(uuid())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  userId    String?
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@index([videoId, emoji])
+}
+
+// ====================================================
+// REGISTRO DE TRANSACCIONES Y WEBHOOKS DE PAGOS (WOMPI)
+// ====================================================
+model PaymentTransaction {
+  id                 String   @id
+  userId             String?
+  reference          String
+  amountInCents      Int
+  currency           String   @default("COP")
+  status             String
+  paymentMethod      String?
+  signatureVerified  Boolean  @default(false)
+  rawEvent           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([reference])
+  @@index([userId])
 }
 

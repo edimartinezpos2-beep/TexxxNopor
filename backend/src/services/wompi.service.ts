@@ -32,23 +32,23 @@ export interface WompiTransactionPayload {
 
 export class WompiService {
   private static getBaseUrl(): string {
-    return process.env.WOMPI_API_URL || 'https://sandbox.wompi.co/v1';
+    return process.env.WOMPI_API_URL || 'https://production.wompi.co/v1';
   }
 
   public static getPublicKey(): string {
-    return process.env.WOMPI_PUBLIC_KEY || 'pub_test_Q5yDA9xoKdePzhSGeVe9KStXTIHsIOXD';
+    return process.env.WOMPI_PUBLIC_KEY || 'pub_prod_zP1CNYatpa7IuMlT6cA7eYjArvsS5gHr';
   }
 
   public static getPrivateKey(): string {
-    return process.env.WOMPI_PRIVATE_KEY || 'prv_test_5jMh8lV6U2wX7yZ0a1b2c3d4e5f6g7h8';
+    return process.env.WOMPI_PRIVATE_KEY || 'prv_prod_FQyNyAoDdRxElNuulmnPpLMdJP0itSO4';
   }
 
   public static getIntegritySecret(): string {
-    return process.env.WOMPI_INTEGRITY_SECRET || 'prod_integrity_sample_or_test_secret';
+    return process.env.WOMPI_INTEGRITY_SECRET || 'prod_integrity_ozFYfU7XHFSNorTksdjwR41Hq3zs5RYp';
   }
 
   public static getEventsSecret(): string {
-    return process.env.WOMPI_EVENTS_SECRET || '';
+    return process.env.WOMPI_EVENTS_SECRET || 'prod_events_QAwchgaNRbpDcgzupWoGueVCWNbNRfei';
   }
 
   /**
@@ -245,5 +245,114 @@ export class WompiService {
       { financial_institution_code: '1066', financial_institution_name: 'Dale!' },
       { financial_institution_code: '1071', financial_institution_name: 'Ualá Colombia' },
     ];
+  }
+
+  /**
+   * Valida criptográficamente la firma (Checksum SHA-256) del webhook de Wompi.
+   * Fórmula oficial de Wompi: SHA256(valores_de_properties + timestamp + events_secret)
+   */
+  public static validateEventSignature(eventPayload: any): { isValid: boolean; reason?: string } {
+    try {
+      if (!eventPayload) {
+        return { isValid: false, reason: 'Payload de evento vacío' };
+      }
+
+      const signature = eventPayload.signature;
+      if (!signature || !signature.checksum || !Array.isArray(signature.properties)) {
+        return {
+          isValid: false,
+          reason: 'Estructura de firma ausente o incompleta (se requiere signature.checksum y signature.properties)',
+        };
+      }
+
+      const eventsSecret = this.getEventsSecret();
+      if (!eventsSecret) {
+        console.warn('[Wompi Security Alert] WOMPI_EVENTS_SECRET no está configurado en .env.');
+        return { isValid: false, reason: 'WOMPI_EVENTS_SECRET no configurado en el servidor' };
+      }
+
+      // 1. Extraer los valores de las propiedades concatenadas en el orden exacto especificado por Wompi
+      let concatenatedValues = '';
+      for (const propPath of signature.properties) {
+        const parts = String(propPath).split('.');
+        let val: any = eventPayload.data;
+        for (const part of parts) {
+          if (val && typeof val === 'object') {
+            val = val[part];
+          } else {
+            val = undefined;
+            break;
+          }
+        }
+
+        if (val === undefined || val === null) {
+          return { isValid: false, reason: `Propiedad no encontrada en event.data: ${propPath}` };
+        }
+        concatenatedValues += String(val);
+      }
+
+      // 2. Concatenar el timestamp del evento
+      const timestamp = eventPayload.timestamp !== undefined ? String(eventPayload.timestamp) : '';
+      concatenatedValues += timestamp;
+
+      // 3. Concatenar el Secreto de Eventos
+      concatenatedValues += eventsSecret;
+
+      // 4. Calcular el hash SHA-256 en hexadecimal minúscula
+      const calculatedChecksum = crypto.createHash('sha256').update(concatenatedValues, 'utf8').digest('hex').toLowerCase();
+      const receivedChecksum = String(signature.checksum).toLowerCase();
+
+      // 5. Comparación en tiempo constante para mitigar ataques de temporización
+      const calcBuf = Buffer.from(calculatedChecksum, 'utf8');
+      const recvBuf = Buffer.from(receivedChecksum, 'utf8');
+
+      if (calcBuf.length !== recvBuf.length || !crypto.timingSafeEqual(calcBuf, recvBuf)) {
+        console.warn(`[Wompi Security Alert] Checksum no coincide. Recibido: ${receivedChecksum}, Calculado: ${calculatedChecksum}`);
+        return { isValid: false, reason: 'Checksum de seguridad no coincide con el Secreto de Eventos' };
+      }
+
+      return { isValid: true };
+    } catch (err: any) {
+      console.error('[Wompi validateEventSignature Exception]:', err.message);
+      return { isValid: false, reason: err.message };
+    }
+  }
+
+  /**
+   * Sincroniza y otorga el entitlement premium en RevenueCat mediante su API REST si está configurado
+   */
+  public static async syncRevenueCatEntitlement(
+    appUserId: string,
+    entitlementId: string = process.env.REVENUECAT_ENTITLEMENT_ID || 'premium_access',
+    duration: string = 'monthly'
+  ): Promise<boolean> {
+    const secretKey = process.env.REVENUECAT_SECRET_KEY;
+    if (!secretKey) {
+      return false;
+    }
+
+    try {
+      const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}/entitlements/${encodeURIComponent(entitlementId)}/promotional`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ duration }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        console.warn(`[RevenueCat Sync HTTP ${res.status}]:`, errJson);
+        return false;
+      }
+
+      console.log(`[RevenueCat Sync] Entitlement '${entitlementId}' otorgado exitosamente al usuario ${appUserId}`);
+      return true;
+    } catch (err: any) {
+      console.error('[RevenueCat Sync Exception]:', err.message);
+      return false;
+    }
   }
 }

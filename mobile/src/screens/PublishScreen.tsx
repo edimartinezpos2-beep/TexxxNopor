@@ -84,8 +84,8 @@ export const PublishScreen: React.FC = () => {
     { name: 'Pareja', icon: Users },
   ];
 
-  // Hashtags sugeridos para posicionamiento SEO
-  const suggestedTags = [
+  // Hashtags sugeridos base para posicionamiento SEO
+  const DEFAULT_SUGGESTED_TAGS = [
     '#parati',
     '#nuevos',
     '#masvideos',
@@ -96,6 +96,7 @@ export const PublishScreen: React.FC = () => {
     '#estreno',
     '#verificado',
   ];
+  const [allAvailableTags, setAllAvailableTags] = useState<string[]>(DEFAULT_SUGGESTED_TAGS);
 
   const visibilities = [
     { name: 'Público', icon: Globe },
@@ -170,12 +171,17 @@ export const PublishScreen: React.FC = () => {
   };
 
   const handleAddCustomTag = () => {
-    if (!customTagInput.trim()) return;
-    const cleanTag = customTagInput.trim().startsWith('#')
-      ? customTagInput.trim().toLowerCase()
-      : `#${customTagInput.trim().toLowerCase()}`;
+    const raw = customTagInput.trim().replace(/^#+/, '').trim();
+    if (!raw) return;
+    const cleanTag = `#${raw.toLowerCase()}`;
+    
+    // Asegurar que esté en la lista visible de disponibles
+    if (!allAvailableTags.includes(cleanTag)) {
+      setAllAvailableTags((prev) => [...prev, cleanTag]);
+    }
+    // Asegurar que quede seleccionado
     if (!selectedTags.includes(cleanTag)) {
-      setSelectedTags([...selectedTags, cleanTag]);
+      setSelectedTags((prev) => [...prev, cleanTag]);
     }
     setCustomTagInput('');
   };
@@ -689,9 +695,9 @@ export const PublishScreen: React.FC = () => {
           <Text style={styles.sectionHint}>Selecciona o escribe tags</Text>
         </View>
 
-        {/* Pills de Tags Seleccionados y Sugeridos */}
+        {/* Pills de Tags Disponibles y Sugeridos */}
         <View style={styles.tagsContainer}>
-          {suggestedTags.map((tag) => {
+          {allAvailableTags.map((tag) => {
             const isSelected = selectedTags.includes(tag);
             return (
               <TouchableOpacity
@@ -717,12 +723,50 @@ export const PublishScreen: React.FC = () => {
             value={customTagInput}
             onChangeText={setCustomTagInput}
             onSubmitEditing={handleAddCustomTag}
+            returnKeyType="done"
           />
           <TouchableOpacity style={styles.addTagBtn} onPress={handleAddCustomTag} activeOpacity={0.8}>
             <Plus size={16} color="#000000" />
             <Text style={styles.addTagBtnText}>Agregar</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Visualización de Hashtags que se publicarán */}
+        {selectedTags.length > 0 && (
+          <View style={{ marginTop: 10 }}>
+            <Text style={{ color: '#8E8E93', fontSize: 11, marginBottom: 6 }}>
+              Hashtags incluidos en este video ({selectedTags.length}):
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {selectedTags.map((tag) => (
+                <View
+                  key={tag}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(206, 255, 0, 0.15)',
+                    borderWidth: 1,
+                    borderColor: COLORS.neonLime,
+                    borderRadius: 14,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    gap: 4,
+                  }}
+                >
+                  <Text style={{ color: COLORS.neonLime, fontSize: 12, fontWeight: '600' }}>
+                    {tag}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => toggleTag(tag)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <X size={13} color={COLORS.neonLime} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* 6. Selector de Visibilidad */}
         <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Visibilidad</Text>

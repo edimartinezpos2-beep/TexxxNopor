@@ -329,6 +329,26 @@ export const api = {
       );
     },
 
+    async getSubscriptionStatus(token: string): Promise<{
+      isVip: boolean;
+      isVerified: boolean;
+      vipExpiresAt?: string | null;
+      subscriptionPlan?: string | null;
+      lastPaymentRef?: string | null;
+      role?: string;
+    } | null> {
+      return await apiFetch<{
+        isVip: boolean;
+        isVerified: boolean;
+        vipExpiresAt?: string | null;
+        subscriptionPlan?: string | null;
+        lastPaymentRef?: string | null;
+        role?: string;
+      }>('/api/user/subscription-status', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
     async updateProfile(
       token: string,
       data: { username?: string; avatarUrl?: string | null; bio?: string; stageName?: string }
@@ -594,6 +614,19 @@ export const api = {
         return false;
       }
     },
+
+    async deleteStory(token: string, storyId: string): Promise<boolean> {
+      try {
+        await apiFetch(`/api/stories/${storyId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+          throwOnError: true,
+        });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
   },
 
   // ====================================================
@@ -780,10 +813,11 @@ export const api = {
         }
       );
       if (res && res.reactions) return res;
+      // Sin datos del servidor: devolver conteo local en 0 (no inventar números)
       return {
-        status: 'success',
+        status: 'offline',
         emoji,
-        reactions: { '🔥': 150, '💋': 90, '🔞': 280, '✨': 100, '❤️': 165, '💦': 125 },
+        reactions: { '🔥': 0, '💋': 0, '🔞': 0, '✨': 0, '❤️': 0, '💦': 0 },
       };
     },
 
@@ -792,7 +826,8 @@ export const api = {
         `/api/videos/${videoId}/reactions`
       );
       if (res && res.reactions) return res.reactions;
-      return { '🔥': 145, '💋': 88, '🔞': 270, '✨': 95, '❤️': 160, '💦': 120 };
+      // Sin datos del servidor: todos en 0
+      return { '🔥': 0, '💋': 0, '🔞': 0, '✨': 0, '❤️': 0, '💦': 0 };
     },
 
     async toggleWatchLater(token: string, videoId: string): Promise<{ isSaved: boolean; message: string }> {
@@ -978,7 +1013,7 @@ export const api = {
         } catch (err: any) {
           console.error('[Upload Exception]:', err);
           resolve({
-            secure_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+            secure_url: `${API_BASE_URL}/uploads/videos/video_${Date.now()}.mp4`,
             public_id: `vid_err_${Date.now()}`,
             duration: '10:00',
             durationSeconds: 600,

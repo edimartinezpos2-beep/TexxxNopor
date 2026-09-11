@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { X, Heart, Flame, Sparkles, Send, CheckCircle2, Eye, Plus } from 'lucide-react-native';
+import { X, Heart, Flame, Sparkles, Send, CheckCircle2, Eye, Plus, Trash2 } from 'lucide-react-native';
 import { ActorStoryGroup, StorySlide, api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -149,6 +149,36 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
+  const handleDeleteStory = () => {
+    if (!currentSlide || !userToken) return;
+    setIsPaused(true);
+    Alert.alert(
+      'Eliminar Historia',
+      '¿Estás seguro de que deseas eliminar esta historia de 24 horas? Esta acción no se puede deshacer.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+          onPress: () => setIsPaused(false),
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await api.stories.deleteStory(userToken, currentSlide.id);
+            if (ok) {
+              Alert.alert('Historia eliminada', 'La historia ha sido eliminada con éxito.');
+              onClose();
+            } else {
+              Alert.alert('Error', 'No se pudo eliminar la historia.');
+              setIsPaused(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!visible || !currentGroup || !currentSlide) {
     return null;
   }
@@ -224,9 +254,20 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
-            <X size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {(user?.role === 'ADMIN' || user?.role === 'CREATOR' || user?.id === currentGroup.actorId) && (
+              <TouchableOpacity
+                onPress={handleDeleteStory}
+                style={[styles.closeBtn, { backgroundColor: 'rgba(255, 45, 85, 0.4)' }]}
+                activeOpacity={0.8}
+              >
+                <Trash2 size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Toast animado de reacción */}

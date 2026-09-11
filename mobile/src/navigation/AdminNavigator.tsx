@@ -30,6 +30,10 @@ import {
   Globe,
   LogOut,
   Upload,
+  RefreshCw,
+  Crown,
+  DollarSign,
+  TrendingUp,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../services/api';

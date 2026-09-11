@@ -117,22 +117,34 @@ app.post('/api/upload/image', upload.fields([{ name: 'image', maxCount: 1 }, { n
         // Guardar copia local permanente
         fs_1.default.writeFileSync(localFilePath, file.buffer);
         const localSecureUrl = `${backendBaseUrl}/uploads/images/${cleanName}`;
-        // Intentar subir a Cloudinary si está disponible
         let cloudUrl = localSecureUrl;
         let cloudPublicId = `img_${cleanName}`;
+        // 1. Priorizar subida a Bunny.net Storage & CDN
         try {
-            const cldRes = await cloudinary_service_1.CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
-            if (cldRes && cldRes.secure_url) {
-                cloudUrl = cldRes.secure_url;
-                cloudPublicId = cldRes.public_id;
+            const bunnyRes = await bunny_service_1.BunnyService.uploadImageBuffer(file.buffer, file.originalname);
+            if (bunnyRes && bunnyRes.secure_url) {
+                cloudUrl = bunnyRes.secure_url;
+                cloudPublicId = bunnyRes.public_id;
+                console.log(`🐰 [Bunny.net Image] Subida exitosa a CDN: ${cloudUrl}`);
             }
         }
-        catch (cldErr) {
-            console.warn('⚠️ Cloudinary no disponible, usando almacenamiento local:', cldErr.message);
+        catch (bunnyErr) {
+            console.warn('⚠️ [Bunny.net Image] Error en subida, intentando Cloudinary:', bunnyErr.message);
+            // 2. Fallback a Cloudinary
+            try {
+                const cldRes = await cloudinary_service_1.CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
+                if (cldRes && cldRes.secure_url) {
+                    cloudUrl = cldRes.secure_url;
+                    cloudPublicId = cldRes.public_id;
+                }
+            }
+            catch (cldErr) {
+                console.warn('⚠️ Cloudinary no disponible, usando almacenamiento local:', cldErr.message);
+            }
         }
         return res.json({
             status: 'success',
-            message: 'Imagen subida correctamente',
+            message: 'Imagen subida correctamente a Bunny.net CDN',
             data: {
                 secure_url: cloudUrl,
                 public_id: cloudPublicId,
@@ -145,7 +157,7 @@ app.post('/api/upload/image', upload.fields([{ name: 'image', maxCount: 1 }, { n
         return res.status(500).json({ error: 'Error al procesar la subida de imagen', details: err.message });
     }
 });
-// 2. Subida de Video (4K / Full HD con generación automática de miniatura)
+// 2. Subida de Video (4K / Full HD con Bunny.net CDN y miniatura automática)
 app.post('/api/upload/video', upload.fields([{ name: 'video', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
         const files = req.files;
@@ -163,44 +175,70 @@ app.post('/api/upload/video', upload.fields([{ name: 'video', maxCount: 1 }, { n
         const localFileUrl = `${backendBaseUrl}/uploads/videos/${cleanName}`;
         // Extraer miniatura automática del video
         let finalThumbnailUrl = `${backendBaseUrl}/uploads/images/default_thumb.jpg`;
+        let thumbBuffer = null;
+        let thumbFilename = '';
         try {
             const thumbResult = await bunny_service_1.BunnyService.extractThumbnailFromBuffer(file.buffer, 2);
             if (thumbResult) {
-                const thumbLocalPath = path_1.default.join(exports.UPLOADS_IMAGES_DIR, thumbResult.filename);
-                fs_1.default.writeFileSync(thumbLocalPath, thumbResult.buffer);
-                finalThumbnailUrl = `${backendBaseUrl}/uploads/images/${thumbResult.filename}`;
+                thumbBuffer = thumbResult.buffer;
+                thumbFilename = thumbResult.filename;
+                const thumbLocalPath = path_1.default.join(exports.UPLOADS_IMAGES_DIR, thumbFilename);
+                fs_1.default.writeFileSync(thumbLocalPath, thumbBuffer);
+                finalThumbnailUrl = `${backendBaseUrl}/uploads/images/${thumbFilename}`;
             }
         }
         catch (tErr) {
             console.warn('⚠️ Error al extraer miniatura con ffmpeg:', tErr.message);
         }
-        // Intentar subir a Cloudinary para CDN global
         let finalVideoUrl = localFileUrl;
         let finalPublicId = cleanName;
         let durationStr = '12:00';
         let durationSec = 720;
+        // 1. Subir a Bunny.net Storage & CDN (Almacenamiento oficial)
         try {
-            const cldRes = await cloudinary_service_1.CloudinaryService.uploadVideoBuffer(file.buffer, file.originalname);
-            if (cldRes && cldRes.secure_url) {
-                finalVideoUrl = cldRes.secure_url;
-                finalPublicId = cldRes.public_id;
-                if (cldRes.duration) {
-                    durationSec = Math.round(cldRes.duration);
-                    const mins = Math.floor(durationSec / 60);
-                    const secs = durationSec % 60;
-                    durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                }
-                if (finalVideoUrl.includes('cloudinary.com')) {
-                    finalThumbnailUrl = finalVideoUrl.replace(/\.[^/.]+$/, '.jpg');
+            const bunnyRes = await bunny_service_1.BunnyService.uploadVideoBuffer(file.buffer, file.originalname);
+            if (bunnyRes && bunnyRes.secure_url) {
+                finalVideoUrl = bunnyRes.secure_url;
+                finalPublicId = bunnyRes.public_id;
+                console.log(`🐰 [Bunny.net Video] Video publicado en CDN oficial: ${finalVideoUrl}`);
+                // Subir miniatura también a Bunny.net
+                if (thumbBuffer) {
+                    try {
+                        const bunnyThumb = await bunny_service_1.BunnyService.uploadImageBuffer(thumbBuffer, thumbFilename);
+                        if (bunnyThumb && bunnyThumb.secure_url) {
+                            finalThumbnailUrl = bunnyThumb.secure_url;
+                        }
+                    }
+                    catch (_) { }
                 }
             }
         }
-        catch (cldErr) {
-            console.warn('⚠️ Cloudinary video fallback a streaming local:', cldErr.message);
+        catch (bunnyErr) {
+            console.warn('⚠️ [Bunny.net Video] Error en subida, intentando Cloudinary:', bunnyErr.message);
+            // 2. Fallback a Cloudinary
+            try {
+                const cldRes = await cloudinary_service_1.CloudinaryService.uploadVideoBuffer(file.buffer, file.originalname);
+                if (cldRes && cldRes.secure_url) {
+                    finalVideoUrl = cldRes.secure_url;
+                    finalPublicId = cldRes.public_id;
+                    if (cldRes.duration) {
+                        durationSec = Math.round(cldRes.duration);
+                        const mins = Math.floor(durationSec / 60);
+                        const secs = durationSec % 60;
+                        durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                    }
+                    if (finalVideoUrl.includes('cloudinary.com')) {
+                        finalThumbnailUrl = finalVideoUrl.replace(/\.[^/.]+$/, '.jpg');
+                    }
+                }
+            }
+            catch (cldErr) {
+                console.warn('⚠️ Cloudinary no disponible, usando streaming directo:', cldErr.message);
+            }
         }
         return res.json({
             status: 'success',
-            message: 'Video procesado y almacenado con éxito',
+            message: 'Video procesado y almacenado con éxito en Bunny.net CDN',
             data: {
                 secure_url: finalVideoUrl,
                 hlsMasterUrl: localStreamUrl,
@@ -3587,6 +3625,70 @@ app.post(['/api/creators/:creatorId/follow', '/api/actors/:creatorId/follow'], r
     catch (err) {
         console.error('Error in toggle follow:', err);
         return res.status(500).json({ error: 'Error al seguir creador' });
+    }
+});
+// ====================================================
+// REACCIONES FLOTANTES EN VIVO (CONTADOR PERSISTENTE)
+// ====================================================
+// Registrar una reacción de emoji en un video
+app.post('/api/videos/:id/react', async (req, res) => {
+    const { id } = req.params;
+    const { emoji, userId } = req.body;
+    if (!emoji) {
+        return res.status(400).json({ error: 'El emoji de reacción es obligatorio' });
+    }
+    try {
+        // Verificar que el video existe
+        const video = await exports.prisma.video.findUnique({ where: { id } });
+        if (!video) {
+            return res.status(404).json({ error: 'Video no encontrado' });
+        }
+        // Guardar reacción en BD
+        await exports.prisma.videoReaction.create({
+            data: {
+                videoId: id,
+                userId: userId || null,
+                emoji: emoji.trim(),
+            },
+        });
+        // Obtener conteo actualizado por emoji
+        const reactionGroups = await exports.prisma.videoReaction.groupBy({
+            by: ['emoji'],
+            where: { videoId: id },
+            _count: { emoji: true },
+        });
+        const reactions = {};
+        reactionGroups.forEach((g) => {
+            reactions[g.emoji] = g._count.emoji;
+        });
+        return res.json({
+            status: 'success',
+            emoji,
+            reactions,
+        });
+    }
+    catch (err) {
+        console.error('Error registrando reacción:', err);
+        return res.status(500).json({ error: 'Error al registrar reacción' });
+    }
+});
+// Obtener conteo de reacciones de un video
+app.get('/api/videos/:id/reactions', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const reactionGroups = await exports.prisma.videoReaction.groupBy({
+            by: ['emoji'],
+            where: { videoId: id },
+            _count: { emoji: true },
+        });
+        const reactions = {};
+        reactionGroups.forEach((g) => {
+            reactions[g.emoji] = g._count.emoji;
+        });
+        return res.json({ status: 'success', videoId: id, reactions });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al obtener reacciones' });
     }
 });
 // Comentarios

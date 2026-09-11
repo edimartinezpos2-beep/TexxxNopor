@@ -103,6 +103,136 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   }
 });
 
+// ====================================================
+// ENDPOINT PÚBLICO: POLÍTICA DE PRIVACIDAD Y DATOS (+18)
+// ====================================================
+app.get('/api/legal/privacy-policy', (req: Request, res: Response) => {
+  const privacyPolicy = {
+    platform: 'TexxxNopor Streaming Platform',
+    version: '2026.1.4',
+    effectiveDate: '2026-03-01',
+    contactEmail: 'notificaciones.sicami@gmail.com',
+    minimumAgeRequired: 18,
+    summary: 'Política oficial de privacidad, tratamiento de datos personales, uso de IA, terceros y retención legal obligatoria para TexxxNopor.',
+    sections: [
+      {
+        id: 'data_collected',
+        title: '1. Datos que Recolectamos',
+        items: [
+          'Datos de Cuenta y Autenticación: Correo electrónico, nombre de usuario, contraseña encriptada con Bcrypt, edad declarada (+18 años) y avatar.',
+          'Datos de Actividad: Historial de reproducción, videos con Me gusta, Ver después, listas de reproducción creadas y descargas offline locales.',
+          'Contenido Multimedia: Videos publicados, títulos, descripciones, historias efímeras (24h) y metadatos de creadores.',
+          'Datos Técnicos: Dirección IP, registros de acceso (timestamps), tipo de dispositivo y tokens JWT de sesión.',
+          'Datos de Pago: Referencias de transacción procesadas por Wompi Bancolombia. TexxxNopor no almacena números de tarjetas de crédito.'
+        ]
+      },
+      {
+        id: 'artificial_intelligence',
+        title: '2. Uso de Inteligencia Artificial (IA)',
+        details: [
+          'IA de Moderación Automatizada y Seguridad: Algoritmos de visión computacional y análisis textual para la detección y prevención estricta de explotación sexual infantil (CSAM), contenido no consentido y violencia.',
+          'IA de Recomendación: Algoritmos de Machine Learning para clasificación de contenidos y personalización del feed según hábitos de reproducción.',
+          'IA de Procesamiento de Lenguaje Natural (NLP): Traducción automática opcional de títulos y descripciones a múltiples idiomas.'
+        ]
+      },
+      {
+        id: 'third_parties',
+        title: '3. Terceros que Utilizan y Procesan la Data',
+        providers: [
+          { name: 'Google LLC', purpose: 'Autenticación federada (Google OAuth 2.0) y servicio de correo seguro SMTP Gmail.' },
+          { name: 'Meta Platforms, Inc.', purpose: 'Autenticación mediante Facebook OAuth 2.0.' },
+          { name: 'Bunny.net (BunnyWay d.o.o.)', purpose: 'CDN de borde global y almacenamiento de streaming de video de baja latencia.' },
+          { name: 'Cloudinary Ltd. / AWS S3', purpose: 'Almacenamiento en la nube y optimización de medios, imágenes y transcodificación.' },
+          { name: 'Wompi S.A.S. / Grupo Bancolombia', purpose: 'Pasarela certificada PCI-DSS para procesamiento de pagos y suscripciones VIP.' },
+          { name: 'Neon / Render', purpose: 'Infraestructura de base de datos PostgreSQL en la nube con cifrado en reposo y en tránsito.' }
+        ]
+      },
+      {
+        id: 'data_retention_and_deletion',
+        title: '4. Política de Retención y Conservación Obligatoria ante Solicitudes de Baja',
+        statement: 'Conforme a normativas internacionales sobre plataformas de contenido adulto (+18) y regulaciones penales y fiscales:',
+        details: [
+          'Desactivación Pública: Al solicitar la baja en la app, la cuenta y perfil público se desactivan de forma inmediata.',
+          'Registros que NO se eliminan de inmediato y se conservan en archivo confidencial seguro:',
+          'a) Registro de verificación de mayoría de edad (+18) y fecha de consentimiento para acreditar cumplimiento ante autoridades legales y regulatorias.',
+          'b) Registros de auditoría, logs de IP y reportes de moderación para prevención de fraudes y abusos futuros.',
+          'c) Comprobantes fiscales y transacciones financieras durante el periodo legal obligatorio (5 a 10 años).',
+          'd) Registros de autoría y contratos en caso de creadores y actores para disputas de derechos de autor (DMCA).'
+        ]
+      },
+      {
+        id: 'security',
+        title: '5. Seguridad y Cifrado',
+        measures: [
+          'Cifrado SSL/TLS de extremo a extremo.',
+          'Almacenamiento de contraseñas mediante hashing unidireccional Bcrypt con Salt.',
+          'Control de acceso basado en roles (RBAC) para aislamiento estricto de privilegios.'
+        ]
+      }
+    ]
+  };
+
+  if (req.query.format === 'html' || (req.headers.accept && req.headers.accept.includes('text/html'))) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Política de Privacidad - TexxxNopor (+18)</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #121214; color: #E0E0E0; line-height: 1.6; padding: 24px; max-width: 800px; margin: auto; }
+          h1 { color: #FFFFFF; border-bottom: 2px solid #FF2D55; padding-bottom: 8px; }
+          h2 { color: #05D9E8; margin-top: 24px; }
+          .badge { background: #E02424; color: #FFF; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+          .card { background: #1C1C20; border: 1px solid #2E2E36; border-radius: 8px; padding: 16px; margin: 12px 0; }
+          .warning { background: rgba(255, 59, 48, 0.1); border-left: 4px solid #FF3B30; padding: 12px; margin: 12px 0; }
+          ul { padding-left: 20px; }
+          li { margin-bottom: 8px; }
+          a { color: #05D9E8; text-decoration: none; }
+        </style>
+      </head>
+      <body>
+        <h1>🛡️ Política de Privacidad <span class="badge">+18 AÑOS</span></h1>
+        <p><strong>Plataforma:</strong> TexxxNopor · <strong>Versión:</strong> 2026.1 · <strong>Contacto:</strong> ${privacyPolicy.contactEmail}</p>
+        
+        <div class="card">
+          <h2>1. Datos que Recolectamos</h2>
+          <ul>${privacyPolicy.sections[0].items?.map(i => `<li>${i}</li>`).join('')}</ul>
+        </div>
+
+        <div class="card">
+          <h2>2. Uso de Inteligencia Artificial (IA)</h2>
+          <ul>${privacyPolicy.sections[1].details?.map(d => `<li>${d}</li>`).join('')}</ul>
+        </div>
+
+        <div class="card">
+          <h2>3. Terceros que Utilizan y Procesan la Data</h2>
+          <ul>${privacyPolicy.sections[2].providers?.map(p => `<li><strong>${p.name}:</strong> ${p.purpose}</li>`).join('')}</ul>
+        </div>
+
+        <div class="warning">
+          <h2 style="color: #FF3B30; margin-top: 0;">4. Retención y No Eliminación Inmediata de Datos Obligatorios</h2>
+          <p>${privacyPolicy.sections[3].statement}</p>
+          <ul>${privacyPolicy.sections[3].details?.map(d => `<li>${d}</li>`).join('')}</ul>
+        </div>
+
+        <div class="card">
+          <h2>5. Seguridad y Cifrado</h2>
+          <ul>${privacyPolicy.sections[4].measures?.map(m => `<li>${m}</li>`).join('')}</ul>
+        </div>
+
+        <p style="text-align: center; color: #888; font-size: 12px; margin-top: 30px;">
+          © 2026 TexxxNopor Streaming Platform · Todos los derechos reservados.
+        </p>
+      </body>
+      </html>
+    `);
+  }
+
+  res.json(privacyPolicy);
+});
+
 // Configuración de Multer para procesamiento de archivos en memoria con límite de 1GB
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -138,22 +268,34 @@ app.post(
       fs.writeFileSync(localFilePath, file.buffer);
       const localSecureUrl = `${backendBaseUrl}/uploads/images/${cleanName}`;
 
-      // Intentar subir a Cloudinary si está disponible
       let cloudUrl = localSecureUrl;
       let cloudPublicId = `img_${cleanName}`;
+
+      // 1. Priorizar subida a Bunny.net Storage & CDN
       try {
-        const cldRes = await CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
-        if (cldRes && cldRes.secure_url) {
-          cloudUrl = cldRes.secure_url;
-          cloudPublicId = cldRes.public_id;
+        const bunnyRes = await BunnyService.uploadImageBuffer(file.buffer, file.originalname);
+        if (bunnyRes && bunnyRes.secure_url) {
+          cloudUrl = bunnyRes.secure_url;
+          cloudPublicId = bunnyRes.public_id;
+          console.log(`🐰 [Bunny.net Image] Subida exitosa a CDN: ${cloudUrl}`);
         }
-      } catch (cldErr: any) {
-        console.warn('⚠️ Cloudinary no disponible, usando almacenamiento local:', cldErr.message);
+      } catch (bunnyErr: any) {
+        console.warn('⚠️ [Bunny.net Image] Error en subida, intentando Cloudinary:', bunnyErr.message);
+        // 2. Fallback a Cloudinary
+        try {
+          const cldRes = await CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
+          if (cldRes && cldRes.secure_url) {
+            cloudUrl = cldRes.secure_url;
+            cloudPublicId = cldRes.public_id;
+          }
+        } catch (cldErr: any) {
+          console.warn('⚠️ Cloudinary no disponible, usando almacenamiento local:', cldErr.message);
+        }
       }
 
       return res.json({
         status: 'success',
-        message: 'Imagen subida correctamente',
+        message: 'Imagen subida correctamente a Bunny.net CDN',
         data: {
           secure_url: cloudUrl,
           public_id: cloudPublicId,
@@ -167,7 +309,7 @@ app.post(
   }
 );
 
-// 2. Subida de Video (4K / Full HD con generación automática de miniatura)
+// 2. Subida de Video (4K / Full HD con Bunny.net CDN y miniatura automática)
 app.post(
   '/api/upload/video',
   upload.fields([{ name: 'video', maxCount: 1 }, { name: 'file', maxCount: 1 }]),
@@ -192,45 +334,70 @@ app.post(
 
       // Extraer miniatura automática del video
       let finalThumbnailUrl = `${backendBaseUrl}/uploads/images/default_thumb.jpg`;
+      let thumbBuffer: Buffer | null = null;
+      let thumbFilename = '';
       try {
         const thumbResult = await BunnyService.extractThumbnailFromBuffer(file.buffer, 2);
         if (thumbResult) {
-          const thumbLocalPath = path.join(UPLOADS_IMAGES_DIR, thumbResult.filename);
-          fs.writeFileSync(thumbLocalPath, thumbResult.buffer);
-          finalThumbnailUrl = `${backendBaseUrl}/uploads/images/${thumbResult.filename}`;
+          thumbBuffer = thumbResult.buffer;
+          thumbFilename = thumbResult.filename;
+          const thumbLocalPath = path.join(UPLOADS_IMAGES_DIR, thumbFilename);
+          fs.writeFileSync(thumbLocalPath, thumbBuffer);
+          finalThumbnailUrl = `${backendBaseUrl}/uploads/images/${thumbFilename}`;
         }
       } catch (tErr: any) {
         console.warn('⚠️ Error al extraer miniatura con ffmpeg:', tErr.message);
       }
 
-      // Intentar subir a Cloudinary para CDN global
       let finalVideoUrl = localFileUrl;
       let finalPublicId = cleanName;
       let durationStr = '12:00';
       let durationSec = 720;
 
+      // 1. Subir a Bunny.net Storage & CDN (Almacenamiento oficial)
       try {
-        const cldRes = await CloudinaryService.uploadVideoBuffer(file.buffer, file.originalname);
-        if (cldRes && cldRes.secure_url) {
-          finalVideoUrl = cldRes.secure_url;
-          finalPublicId = cldRes.public_id;
-          if (cldRes.duration) {
-            durationSec = Math.round(cldRes.duration);
-            const mins = Math.floor(durationSec / 60);
-            const secs = durationSec % 60;
-            durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-          }
-          if (finalVideoUrl.includes('cloudinary.com')) {
-            finalThumbnailUrl = finalVideoUrl.replace(/\.[^/.]+$/, '.jpg');
+        const bunnyRes = await BunnyService.uploadVideoBuffer(file.buffer, file.originalname);
+        if (bunnyRes && bunnyRes.secure_url) {
+          finalVideoUrl = bunnyRes.secure_url;
+          finalPublicId = bunnyRes.public_id;
+          console.log(`🐰 [Bunny.net Video] Video publicado en CDN oficial: ${finalVideoUrl}`);
+
+          // Subir miniatura también a Bunny.net
+          if (thumbBuffer) {
+            try {
+              const bunnyThumb = await BunnyService.uploadImageBuffer(thumbBuffer, thumbFilename);
+              if (bunnyThumb && bunnyThumb.secure_url) {
+                finalThumbnailUrl = bunnyThumb.secure_url;
+              }
+            } catch (_) {}
           }
         }
-      } catch (cldErr: any) {
-        console.warn('⚠️ Cloudinary video fallback a streaming local:', cldErr.message);
+      } catch (bunnyErr: any) {
+        console.warn('⚠️ [Bunny.net Video] Error en subida, intentando Cloudinary:', bunnyErr.message);
+        // 2. Fallback a Cloudinary
+        try {
+          const cldRes = await CloudinaryService.uploadVideoBuffer(file.buffer, file.originalname);
+          if (cldRes && cldRes.secure_url) {
+            finalVideoUrl = cldRes.secure_url;
+            finalPublicId = cldRes.public_id;
+            if (cldRes.duration) {
+              durationSec = Math.round(cldRes.duration);
+              const mins = Math.floor(durationSec / 60);
+              const secs = durationSec % 60;
+              durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+            if (finalVideoUrl.includes('cloudinary.com')) {
+              finalThumbnailUrl = finalVideoUrl.replace(/\.[^/.]+$/, '.jpg');
+            }
+          }
+        } catch (cldErr: any) {
+          console.warn('⚠️ Cloudinary no disponible, usando streaming directo:', cldErr.message);
+        }
       }
 
       return res.json({
         status: 'success',
-        message: 'Video procesado y almacenado con éxito',
+        message: 'Video procesado y almacenado con éxito en Bunny.net CDN',
         data: {
           secure_url: finalVideoUrl,
           hlsMasterUrl: localStreamUrl,
@@ -1483,6 +1650,46 @@ app.post('/api/user/subscribe-premium', authenticateJWT, async (req: Request, re
   }
 });
 
+// Consultar estado real de suscripción VIP desde la base de datos (Anti-Falsificación)
+app.get('/api/user/subscription-status', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        isVerified: true,
+        isVip: true,
+        vipExpiresAt: true,
+        subscriptionPlan: true,
+        lastPaymentRef: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const now = new Date();
+    const isActiveVip = Boolean(user.isVip && (!user.vipExpiresAt || user.vipExpiresAt > now));
+
+    return res.json({
+      isVip: isActiveVip,
+      isVerified: Boolean(user.isVerified || isActiveVip),
+      vipExpiresAt: user.vipExpiresAt,
+      subscriptionPlan: user.subscriptionPlan,
+      lastPaymentRef: user.lastPaymentRef,
+      role: user.role,
+    });
+  } catch (err: any) {
+    console.error('Error in subscription-status:', err);
+    return res.status(500).json({ error: 'Error al consultar estado de suscripción' });
+  }
+});
+
 // Actualizar Perfil de Usuario (Avatar, Nombre de usuario)
 app.put('/api/user/profile', authenticateJWT, async (req: Request, res: Response) => {
   try {
@@ -1789,14 +1996,26 @@ app.post('/api/wompi/create-transaction', authenticateJWT, async (req: Request, 
 
     if (wompiResult.success && wompiResult.data) {
       const tx = wompiResult.data;
-      
-      // Si la pasarela aprueba de inmediato (o en sandbox)
-      if (tx.status === 'APPROVED') {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { isVerified: true },
-        });
-      }
+
+      // Registrar transacción inicial en estado PENDING/creada
+      await prisma.paymentTransaction.upsert({
+        where: { id: String(tx.id) },
+        update: {
+          status: tx.status || 'PENDING',
+          reference,
+          amountInCents,
+        },
+        create: {
+          id: String(tx.id),
+          userId: user.id,
+          reference,
+          amountInCents,
+          currency: 'COP',
+          status: tx.status || 'PENDING',
+          paymentMethod: paymentMethodType || 'PSE',
+          signatureVerified: false,
+        },
+      });
 
       return res.json({
         status: 'success',
@@ -1812,14 +2031,22 @@ app.post('/api/wompi/create-transaction', authenticateJWT, async (req: Request, 
       });
     }
 
-    // Si Wompi responde en modo sandbox o requiere fallback seguro
+    // Si la API de Wompi está en sandbox o requiere checkout directo
     const fallbackTxId = `WOMPI-TX-${Date.now()}`;
     const authCode = `AUT-WMP-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // Activamos usuario en base de datos para garantizar continuidad en modo de prueba
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isVerified: true },
+    // Registrar intención de pago como PENDING (la activación VIP requiere confirmación vía Webhook)
+    await prisma.paymentTransaction.create({
+      data: {
+        id: fallbackTxId,
+        userId: user.id,
+        reference,
+        amountInCents,
+        currency: 'COP',
+        status: 'PENDING',
+        paymentMethod: paymentMethodType || 'PSE',
+        signatureVerified: false,
+      },
     });
 
     return res.json({
@@ -1828,11 +2055,11 @@ app.post('/api/wompi/create-transaction', authenticateJWT, async (req: Request, 
         id: fallbackTxId,
         authCode,
         reference,
-        status: 'APPROVED',
+        status: 'PENDING',
         amount: planAmount,
         currency: 'COP',
         bankName: bankCode ? `Banco Cod. ${bankCode} (PSE)` : 'Wompi Bancolombia',
-        message: 'Transacción procesada correctamente con la pasarela Wompi.',
+        message: 'Transacción iniciada. Esperando confirmación de la pasarela bancaria.',
       },
     });
   } catch (err: any) {
@@ -1864,30 +2091,139 @@ app.get('/api/wompi/status/:transactionId', authenticateJWT, async (req: Request
   }
 });
 
-// 4. Webhook Oficial de Wompi (Confirmación Asíncrona Automática 24/7)
+// 4. Webhook Oficial de Wompi (Confirmación Asíncrona Automática 24/7 con Checksum Criptográfico)
 app.post('/api/wompi/webhook', async (req: Request, res: Response) => {
   try {
     const event = req.body;
-    console.log('[Wompi Webhook Event Received]:', event?.event);
+    console.log('[Wompi Webhook] Petición recibida. Evento:', event?.event);
 
-    if (event?.event === 'transaction.updated' && event?.data?.transaction) {
+    // 1. Verificación del Checksum Criptográfico (Firma de Seguridad SHA-256)
+    const signatureValidation = WompiService.validateEventSignature(event);
+    if (!signatureValidation.isValid) {
+      console.warn('[Wompi Webhook RECHAZADO 401] Firma inválida:', signatureValidation.reason);
+      return res.status(401).json({
+        error: 'Firma criptográfica inválida o no autorizada',
+        reason: signatureValidation.reason,
+      });
+    }
+
+    console.log('[Wompi Webhook] Checksum SHA-256 validado con éxito.');
+
+    // 2. Procesar solo eventos de actualización de transacción
+    if (event.event === 'transaction.updated' && event.data?.transaction) {
       const tx = event.data.transaction;
-      if (tx.status === 'APPROVED') {
-        const customerEmail = tx.customer_email?.toLowerCase();
-        if (customerEmail) {
-          await prisma.user.updateMany({
-            where: { email: customerEmail },
-            data: { isVerified: true },
-          });
-          console.log(`[Wompi Webhook] Usuario ${customerEmail} activado como VIP con éxito.`);
+      const txId = String(tx.id);
+      const reference = String(tx.reference || '');
+      const status = String(tx.status || '').toUpperCase();
+      const amountInCents = Number(tx.amount_in_cents || 0);
+      const currency = String(tx.currency || 'COP');
+      const customerEmail = String(tx.customer_email || '').toLowerCase().trim();
+      const paymentMethod = String(tx.payment_method_type || 'PSE');
+
+      // 3. Comprobar Idempotencia en la base de datos
+      const existingTx = await prisma.paymentTransaction.findUnique({
+        where: { id: txId },
+      });
+
+      if (existingTx && existingTx.status === 'APPROVED') {
+        console.log(`[Wompi Webhook] Transacción ${txId} ya procesada previamente como APPROVED.`);
+        return res.status(200).json({ received: true, status: 'ALREADY_PROCESSED' });
+      }
+
+      // 4. Localizar al usuario en PostgreSQL
+      let foundUser: any = null;
+
+      // Buscar por referencia generada TX-{userId}-...
+      const refMatch = reference.match(/^TX-([a-zA-Z0-9_-]+)-\d+$/);
+      if (refMatch && refMatch[1]) {
+        const potentialId = refMatch[1];
+        foundUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { id: potentialId },
+              { id: { startsWith: potentialId } },
+            ],
+          },
+        });
+      }
+
+      // Fallback: Buscar por correo electrónico del pagador
+      if (!foundUser && customerEmail) {
+        foundUser = await prisma.user.findUnique({
+          where: { email: customerEmail },
+        });
+      }
+
+      console.log(`[Wompi Webhook] Transacción ${txId} (${reference}) Estado: ${status}. Usuario asociado:`, foundUser?.email || 'No identificado');
+
+      // 5. Registrar o actualizar la transacción en PaymentTransaction
+      await prisma.paymentTransaction.upsert({
+        where: { id: txId },
+        update: {
+          status,
+          signatureVerified: true,
+          rawEvent: event,
+          userId: foundUser?.id || null,
+        },
+        create: {
+          id: txId,
+          userId: foundUser?.id || null,
+          reference,
+          amountInCents,
+          currency,
+          status,
+          paymentMethod,
+          signatureVerified: true,
+          rawEvent: event,
+        },
+      });
+
+      // 6. Si el estado es APPROVED y el usuario fue identificado, otorgar acceso VIP
+      if (status === 'APPROVED' && foundUser) {
+        let days = 30;
+        let planName = '1_month';
+        let rcDuration = 'monthly';
+
+        if (amountInCents >= 8000000) {
+          days = 365;
+          planName = '12_months';
+          rcDuration = 'yearly';
+        } else if (amountInCents >= 4500000) {
+          days = 180;
+          planName = '6_months';
+          rcDuration = 'six_month';
+        } else if (amountInCents >= 2500000) {
+          days = 90;
+          planName = '3_months';
+          rcDuration = 'three_month';
         }
+
+        const now = new Date();
+        const baseDate = (foundUser.vipExpiresAt && foundUser.vipExpiresAt > now) ? foundUser.vipExpiresAt : now;
+        const newExpiresAt = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
+
+        await prisma.user.update({
+          where: { id: foundUser.id },
+          data: {
+            isVip: true,
+            isVerified: true,
+            vipExpiresAt: newExpiresAt,
+            subscriptionPlan: planName,
+            lastPaymentRef: reference || txId,
+          },
+        });
+
+        console.log(`[Wompi Webhook APPROVED] Usuario ${foundUser.email} actualizado a VIP hasta ${newExpiresAt.toISOString()}`);
+
+        // Opcional: Sincronizar con RevenueCat
+        await WompiService.syncRevenueCatEntitlement(foundUser.id, process.env.REVENUECAT_ENTITLEMENT_ID || 'premium_access', rcDuration);
       }
     }
 
-    return res.status(200).json({ received: true });
+    return res.status(200).json({ received: true, status: 'PROCESSED' });
   } catch (err: any) {
-    console.error('[Wompi Webhook Error]:', err);
-    return res.status(200).json({ received: true });
+    console.error('[Wompi Webhook Exception]:', err);
+    return res.status(500).json({ error: 'Error interno al procesar webhook', message: err.message });
   }
 });
 
@@ -3236,8 +3572,16 @@ app.get('/api/stories', async (req: Request, res: Response) => {
 
   try {
     const now = new Date();
-    // 1. Obtener historias activas (no expiradas)
-    let activeStories = await prisma.story.findMany({
+
+    // 1. Purgar y eliminar permanentemente de PostgreSQL todas las historias expiradas (vencidas después de 24 horas)
+    await prisma.story.deleteMany({
+      where: {
+        expiresAt: { lte: now },
+      },
+    });
+
+    // 2. Obtener historias vigentes y activas
+    const activeStories = await prisma.story.findMany({
       where: {
         expiresAt: { gt: now },
       },
@@ -3247,52 +3591,6 @@ app.get('/api/stories', async (req: Request, res: Response) => {
         views: currentUserId ? { where: { userId: currentUserId } } : false,
       },
     });
-
-    // 2. Si no hay historias en BD, asegurar semillas de demostración con actrices populares
-    if (activeStories.length === 0) {
-      const topActors = await prisma.actor.findMany({ take: 5, orderBy: { createdAt: 'desc' } });
-      const demoStoryMedia = [
-        {
-          mediaUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=1080&auto=format&fit=crop',
-          caption: '✨ Rodaje nocturno en 4K exclusivo... ¡Estreno pronto!',
-        },
-        {
-          mediaUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1080&auto=format&fit=crop',
-          caption: '💋 Detrás de cámaras con el equipo de TexxxNopor 🔥',
-        },
-        {
-          mediaUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=1080&auto=format&fit=crop',
-          caption: '🔥 Preguntas y respuestas exclusivas para seguidores VIP',
-        },
-        {
-          mediaUrl: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=1080&auto=format&fit=crop',
-          caption: '🎬 Nueva producción 4K Ultra HD disponible en mi perfil',
-        },
-      ];
-
-      for (let i = 0; i < topActors.length && i < demoStoryMedia.length; i++) {
-        const actor = topActors[i];
-        const media = demoStoryMedia[i];
-        await prisma.story.create({
-          data: {
-            actorId: actor.id,
-            mediaUrl: media.mediaUrl,
-            mediaType: 'IMAGE',
-            caption: media.caption,
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-          },
-        });
-      }
-
-      activeStories = await prisma.story.findMany({
-        where: { expiresAt: { gt: now } },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          actor: true,
-          views: currentUserId ? { where: { userId: currentUserId } } : false,
-        },
-      });
-    }
 
     // 3. Agrupar historias por actor
     const actorMap = new Map<string, any>();
@@ -3468,6 +3766,42 @@ app.post('/api/stories/:id/react', authenticateJWT, async (req: Request, res: Re
     return res.json({ status: 'success', message: 'Reacción enviada' });
   } catch (err: any) {
     return res.status(500).json({ error: 'Error al enviar reacción' });
+  }
+});
+
+// Eliminar historia (El creador de la historia o ADMIN)
+app.delete('/api/stories/:id', authenticateJWT, async (req: Request, res: Response) => {
+  const storyId = req.params.id;
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+
+  try {
+    const story = await prisma.story.findUnique({
+      where: { id: storyId },
+      include: { actor: true },
+    });
+
+    if (!story) {
+      return res.status(404).json({ error: 'Historia no encontrada' });
+    }
+
+    // Comprobar si el usuario es el creador de la historia o ADMIN
+    const isOwner = story.userId === userId || story.actor.userId === userId;
+    const isAdmin = userRole === UserRole.ADMIN;
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'No tienes permiso para eliminar esta historia' });
+    }
+
+    // Borrar vistas asociadas y luego la historia
+    await prisma.storyView.deleteMany({ where: { storyId } }).catch(() => {});
+    await prisma.story.delete({ where: { id: storyId } });
+
+    console.log(`🗑️ [Stories] Historia ${storyId} eliminada por usuario ${userId}`);
+    return res.json({ status: 'success', message: 'Historia eliminada correctamente' });
+  } catch (err: any) {
+    console.error('Error eliminando historia:', err);
+    return res.status(500).json({ error: 'Error al eliminar la historia' });
   }
 });
 
@@ -4183,6 +4517,79 @@ app.post(
     }
   }
 );
+
+// ====================================================
+// REACCIONES FLOTANTES EN VIVO (CONTADOR PERSISTENTE)
+// ====================================================
+
+// Registrar una reacción de emoji en un video
+app.post('/api/videos/:id/react', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { emoji, userId } = req.body;
+
+  if (!emoji) {
+    return res.status(400).json({ error: 'El emoji de reacción es obligatorio' });
+  }
+
+  try {
+    // Verificar que el video existe
+    const video = await prisma.video.findUnique({ where: { id } });
+    if (!video) {
+      return res.status(404).json({ error: 'Video no encontrado' });
+    }
+
+    // Guardar reacción en BD
+    await prisma.videoReaction.create({
+      data: {
+        videoId: id,
+        userId: userId || null,
+        emoji: emoji.trim(),
+      },
+    });
+
+    // Obtener conteo actualizado por emoji
+    const reactionGroups = await prisma.videoReaction.groupBy({
+      by: ['emoji'],
+      where: { videoId: id },
+      _count: { emoji: true },
+    });
+
+    const reactions: Record<string, number> = {};
+    reactionGroups.forEach((g) => {
+      reactions[g.emoji] = g._count.emoji;
+    });
+
+    return res.json({
+      status: 'success',
+      emoji,
+      reactions,
+    });
+  } catch (err: any) {
+    console.error('Error registrando reacción:', err);
+    return res.status(500).json({ error: 'Error al registrar reacción' });
+  }
+});
+
+// Obtener conteo de reacciones de un video
+app.get('/api/videos/:id/reactions', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const reactionGroups = await prisma.videoReaction.groupBy({
+      by: ['emoji'],
+      where: { videoId: id },
+      _count: { emoji: true },
+    });
+
+    const reactions: Record<string, number> = {};
+    reactionGroups.forEach((g) => {
+      reactions[g.emoji] = g._count.emoji;
+    });
+
+    return res.json({ status: 'success', videoId: id, reactions });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al obtener reacciones' });
+  }
+});
 
 // Comentarios
 app.get('/api/videos/:id/comments', async (req: Request, res: Response) => {

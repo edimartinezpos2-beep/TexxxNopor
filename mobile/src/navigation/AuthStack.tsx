@@ -36,6 +36,7 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../theme/colors';
 import { BrandLogo } from '../components/BrandLogo';
 import { SocialAuthService } from '../services/socialAuth';
+import { PrivacyPolicyModal } from '../components/PrivacyPolicyModal';
 
 interface AuthScreenProps {
   onClose?: () => void;
@@ -45,6 +46,7 @@ interface AuthScreenProps {
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = 'REGISTER' }) => {
   const { signIn } = useAuth();
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>(initialMode);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -596,6 +598,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
                       thumbColor="#FFFFFF"
                     />
                   </View>
+                  <TouchableOpacity
+                    style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                    onPress={() => setShowPrivacyPolicy(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ color: COLORS.neonLime, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline' }}>
+                      📜 Leer Política de Privacidad y Tratamiento de Datos
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -659,14 +670,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </>
         )}
 
-        {/* Footer de Seguridad */}
-        <View style={styles.securityFooter}>
-          <Shield size={16} color="#777780" />
-          <Text style={styles.securityText}>
-            Conexión encriptada SSL/TLS · Privacidad garantizada
+        {/* Footer de Seguridad con Enlace a Política de Privacidad */}
+        <TouchableOpacity
+          style={styles.securityFooter}
+          onPress={() => setShowPrivacyPolicy(true)}
+          activeOpacity={0.7}
+        >
+          <Shield size={16} color={COLORS.neonLime} />
+          <Text style={[styles.securityText, { textDecorationLine: 'underline', color: '#B0B0C0' }]}>
+            Conexión encriptada SSL/TLS · Política de Privacidad (+18)
           </Text>
-        </View>
+        </TouchableOpacity>
       </ScrollView>
+
+      <PrivacyPolicyModal
+        visible={showPrivacyPolicy}
+        onClose={() => setShowPrivacyPolicy(false)}
+      />
     </KeyboardAvoidingView>
   );
 };
