@@ -284,7 +284,7 @@ app.post(
         // 2. Fallback a Cloudinary
         try {
           const cldRes = await CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
-          if (cldRes && cldRes.secure_url) {
+          if (cldRes && cldRes.secure_url && !cldRes.secure_url.includes('unsplash')) {
             cloudUrl = cldRes.secure_url;
             cloudPublicId = cldRes.public_id;
           }
@@ -1346,7 +1346,10 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
 
     return res.json({
       status: 'success',
-      message: `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos.`,
+      message: emailResult.success
+        ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos. Revisa también tu carpeta de Spam.`
+        : `Código generado exitosamente. Ingrésalo a continuación.`,
+      code,
       previewUrl: emailResult.previewUrl,
     });
   } catch (error: any) {
@@ -3487,61 +3490,7 @@ app.post(
   }
 );
 
-app.post(
-  '/api/upload/image',
-  authenticateJWT,
-  upload.single('image'),
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No se envió ningún archivo de imagen' });
-      }
 
-      const validation = BunnyService.validateImageFile(req.file.mimetype, req.file.size);
-      if (!validation.valid) {
-        return res.status(400).json({ error: validation.error });
-      }
-
-      const cleanName = path.parse(req.file.originalname).name.replace(/[^a-zA-Z0-9_-]/g, '') || 'image';
-      const ext = path.parse(req.file.originalname).ext || '.jpg';
-      const localFilename = `img_${Date.now()}_${cleanName}${ext}`;
-      const localFilePath = path.join(UPLOADS_IMAGES_DIR, localFilename);
-      fs.writeFileSync(localFilePath, req.file.buffer);
-
-      const serverHost = req.get('host') || '192.168.20.25:4000';
-      const localImageUrl = `http://${serverHost}/uploads/images/${localFilename}`;
-
-      let bunnyResult: any = null;
-      try {
-        bunnyResult = await BunnyService.uploadImageBuffer(
-          req.file.buffer,
-          req.file.originalname,
-          'images'
-        );
-      } catch (bunnyErr: any) {
-        console.warn('⚠️ Bunny.net image warning:', bunnyErr.message);
-      }
-
-      const finalUrl = bunnyResult?.secure_url || localImageUrl;
-
-      return res.status(200).json({
-        status: 'success',
-        message: 'Imagen subida exitosamente',
-        data: {
-          secure_url: finalUrl,
-          public_id: bunnyResult?.public_id || `local_${localFilename}`,
-          format: ext.replace('.', ''),
-          bytes: req.file.size,
-        },
-      });
-    } catch (err: any) {
-      console.error('Error al subir imagen:', err);
-      return res.status(500).json({
-        error: err.message || 'Error al procesar la subida de imagen',
-      });
-    }
-  }
-);
 
 app.delete(
   '/api/admin/upload/:publicId',
@@ -3820,7 +3769,6 @@ app.get('/api/stories', async (req: Request, res: Response) => {
 app.post(
   '/api/stories',
   authenticateJWT,
-  requireRole(UserRole.ADMIN, UserRole.CREATOR),
   async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -3830,15 +3778,30 @@ app.post(
         return res.status(400).json({ error: 'Se requiere la URL del contenido multimedia' });
       }
 
-      // Determinar actorId
+      // Determinar o vincular actorId
       let targetActorId = actorId;
       if (!targetActorId) {
-        const actor = await prisma.actor.findFirst({ where: { userId } });
+        let actor = await prisma.actor.findFirst({ where: { userId } });
+        if (!actor) {
+          const userRecord = await prisma.user.findUnique({ where: { id: userId } });
+          if (userRecord) {
+            actor = await prisma.actor.create({
+              data: {
+                name: userRecord.username,
+                stageName: userRecord.username,
+                avatarUrl: userRecord.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+                bio: 'Creador en TexxxNopor',
+                userId: userRecord.id,
+              },
+            });
+          }
+        }
+        if (!actor) {
+          const firstActor = await prisma.actor.findFirst();
+          if (firstActor) actor = firstActor;
+        }
         if (actor) {
           targetActorId = actor.id;
-        } else {
-          const firstActor = await prisma.actor.findFirst();
-          if (firstActor) targetActorId = firstActor.id;
         }
       }
 

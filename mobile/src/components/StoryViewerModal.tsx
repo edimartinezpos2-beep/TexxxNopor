@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { X, Heart, Flame, Sparkles, Send, CheckCircle2, Eye, Plus, Trash2 } from 'lucide-react-native';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { ActorStoryGroup, StorySlide, api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +45,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [isSendingReaction, setIsSendingReaction] = useState(false);
   const [reactionSentToast, setReactionSentToast] = useState<string | null>(null);
 
+  const videoRef = useRef<Video | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -69,24 +71,42 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   useEffect(() => {
     if (!visible || !currentSlide || isPaused) return;
 
-    progressAnim.setValue(0);
-    const animation = Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: SLIDE_DURATION_MS,
-      useNativeDriver: false,
-    });
+    if (currentSlide.mediaType === 'IMAGE') {
+      progressAnim.setValue(0);
+      const animation = Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: SLIDE_DURATION_MS,
+        useNativeDriver: false,
+      });
 
-    progressAnimationRef.current = animation;
-    animation.start(({ finished }) => {
-      if (finished) {
-        goToNextSlide();
-      }
-    });
+      progressAnimationRef.current = animation;
+      animation.start(({ finished }) => {
+        if (finished) {
+          goToNextSlide();
+        }
+      });
 
-    return () => {
-      animation.stop();
-    };
-  }, [visible, currentGroupIdx, currentSlideIdx, isPaused]);
+      return () => {
+        animation.stop();
+      };
+    } else {
+      // Para videos, la posición del reproductor actualiza la barra
+      progressAnim.setValue(0);
+    }
+  }, [visible, currentGroupIdx, currentSlideIdx, isPaused, currentSlide?.mediaType]);
+
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
+
+    if (status.durationMillis && status.durationMillis > 0) {
+      const progress = status.positionMillis / status.durationMillis;
+      progressAnim.setValue(Math.min(progress, 1));
+    }
+
+    if (status.didJustFinish) {
+      goToNextSlide();
+    }
+  };
 
   const goToNextSlide = () => {
     if (!currentGroup) return;
@@ -187,12 +207,25 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <View style={styles.container}>
-        {/* Imagen / Fondo de la Historia */}
-        <Image
-          source={{ uri: currentSlide.mediaUrl }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        />
+        {/* Imagen o Video de la Historia */}
+        {currentSlide.mediaType === 'VIDEO' ? (
+          <Video
+            ref={videoRef}
+            source={{ uri: currentSlide.mediaUrl }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={visible && !isPaused}
+            isLooping={false}
+            useNativeControls={false}
+            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+          />
+        ) : (
+          <Image
+            source={{ uri: currentSlide.mediaUrl }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        )}
         <View style={styles.darkGradientOverlay} />
 
         {/* Zona de Toque (Izquierda / Derecha / Pausa en Hold) */}

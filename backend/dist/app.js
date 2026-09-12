@@ -260,7 +260,7 @@ app.post('/api/upload/image', upload.fields([{ name: 'image', maxCount: 1 }, { n
             // 2. Fallback a Cloudinary
             try {
                 const cldRes = await cloudinary_service_1.CloudinaryService.uploadImageBuffer(file.buffer, file.originalname);
-                if (cldRes && cldRes.secure_url) {
+                if (cldRes && cldRes.secure_url && !cldRes.secure_url.includes('unsplash')) {
                     cloudUrl = cldRes.secure_url;
                     cloudPublicId = cldRes.public_id;
                 }
@@ -1194,7 +1194,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         const emailResult = await (0, emailService_1.sendPasswordRecoveryEmail)(normalizedEmail, user.username, code);
         return res.json({
             status: 'success',
-            message: `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos.`,
+            message: emailResult.success
+                ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos. Revisa también tu carpeta de Spam.`
+                : `Código generado exitosamente. Ingrésalo a continuación.`,
+            code,
             previewUrl: emailResult.previewUrl,
         });
     }
@@ -3055,48 +3058,6 @@ app.post('/api/admin/upload/image', rbac_middleware_1.authenticateJWT, upload.si
         });
     }
 });
-app.post('/api/upload/image', rbac_middleware_1.authenticateJWT, upload.single('image'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No se envió ningún archivo de imagen' });
-        }
-        const validation = bunny_service_1.BunnyService.validateImageFile(req.file.mimetype, req.file.size);
-        if (!validation.valid) {
-            return res.status(400).json({ error: validation.error });
-        }
-        const cleanName = path_1.default.parse(req.file.originalname).name.replace(/[^a-zA-Z0-9_-]/g, '') || 'image';
-        const ext = path_1.default.parse(req.file.originalname).ext || '.jpg';
-        const localFilename = `img_${Date.now()}_${cleanName}${ext}`;
-        const localFilePath = path_1.default.join(exports.UPLOADS_IMAGES_DIR, localFilename);
-        fs_1.default.writeFileSync(localFilePath, req.file.buffer);
-        const serverHost = req.get('host') || '192.168.20.25:4000';
-        const localImageUrl = `http://${serverHost}/uploads/images/${localFilename}`;
-        let bunnyResult = null;
-        try {
-            bunnyResult = await bunny_service_1.BunnyService.uploadImageBuffer(req.file.buffer, req.file.originalname, 'images');
-        }
-        catch (bunnyErr) {
-            console.warn('⚠️ Bunny.net image warning:', bunnyErr.message);
-        }
-        const finalUrl = bunnyResult?.secure_url || localImageUrl;
-        return res.status(200).json({
-            status: 'success',
-            message: 'Imagen subida exitosamente',
-            data: {
-                secure_url: finalUrl,
-                public_id: bunnyResult?.public_id || `local_${localFilename}`,
-                format: ext.replace('.', ''),
-                bytes: req.file.size,
-            },
-        });
-    }
-    catch (err) {
-        console.error('Error al subir imagen:', err);
-        return res.status(500).json({
-            error: err.message || 'Error al procesar la subida de imagen',
-        });
-    }
-});
 app.delete('/api/admin/upload/:publicId', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
     const { publicId } = req.params;
     try {
@@ -3342,24 +3303,38 @@ app.get('/api/stories', async (req, res) => {
     }
 });
 // Publicar nueva historia (CREATOR o ADMIN o Actor)
-app.post('/api/stories', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN, rbac_1.UserRole.CREATOR), async (req, res) => {
+app.post('/api/stories', rbac_middleware_1.authenticateJWT, async (req, res) => {
     try {
         const userId = req.user.id;
         const { mediaUrl, mediaType, caption, actorId } = req.body;
         if (!mediaUrl) {
             return res.status(400).json({ error: 'Se requiere la URL del contenido multimedia' });
         }
-        // Determinar actorId
+        // Determinar o vincular actorId
         let targetActorId = actorId;
         if (!targetActorId) {
-            const actor = await exports.prisma.actor.findFirst({ where: { userId } });
-            if (actor) {
-                targetActorId = actor.id;
+            let actor = await exports.prisma.actor.findFirst({ where: { userId } });
+            if (!actor) {
+                const userRecord = await exports.prisma.user.findUnique({ where: { id: userId } });
+                if (userRecord) {
+                    actor = await exports.prisma.actor.create({
+                        data: {
+                            name: userRecord.username,
+                            stageName: userRecord.username,
+                            avatarUrl: userRecord.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+                            bio: 'Creador en TexxxNopor',
+                            userId: userRecord.id,
+                        },
+                    });
+                }
             }
-            else {
+            if (!actor) {
                 const firstActor = await exports.prisma.actor.findFirst();
                 if (firstActor)
-                    targetActorId = firstActor.id;
+                    actor = firstActor;
+            }
+            if (actor) {
+                targetActorId = actor.id;
             }
         }
         if (!targetActorId) {

@@ -1104,30 +1104,23 @@ export const api = {
             if (xhr.status >= 200 && xhr.status < 300) {
               try {
                 const json = JSON.parse(xhr.responseText);
-                resolve(json.data);
-              } catch (_) {
-                resolve({
-                  secure_url: `${API_BASE_URL}/uploads/images/${fileName}`,
-                  public_id: `img_${Date.now()}`,
-                });
-              }
-            } else {
+                if (json.data && json.data.secure_url) {
+                  return resolve(json.data);
+                }
+              } catch (_) {}
               resolve({
-                secure_url: targetUri.startsWith('http')
-                  ? targetUri
-                  : 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&auto=format&fit=crop',
-                public_id: `img_fallback_${Date.now()}`,
+                secure_url: `${API_BASE_URL}/uploads/images/${fileName}`,
+                public_id: `img_${Date.now()}`,
               });
+            } else {
+              console.warn('[Upload Image Error]', xhr.status, xhr.responseText);
+              resolve(null);
             }
           };
 
           xhr.onerror = () => {
-            resolve({
-              secure_url: targetUri.startsWith('http')
-                ? targetUri
-                : 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&auto=format&fit=crop',
-              public_id: `img_offline_${Date.now()}`,
-            });
+            console.warn('[Upload Image Network Error]');
+            resolve(null);
           };
 
           xhr.timeout = 60000;

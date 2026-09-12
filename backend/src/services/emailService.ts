@@ -8,11 +8,21 @@ const createTransporter = async () => {
   const pass = process.env.SMTP_PASS;
 
   if (host && user && pass) {
+    // Si es Gmail, usar la configuración optimizada para Gmail
+    if (host.includes('gmail')) {
+      return nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false },
+      });
+    }
+
     return nodemailer.createTransport({
       host,
       port,
       secure: port === 465,
       auth: { user, pass },
+      tls: { rejectUnauthorized: false },
     });
   }
 

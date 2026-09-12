@@ -12,11 +12,20 @@ const createTransporter = async () => {
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
     if (host && user && pass) {
+        // Si es Gmail, usar la configuración optimizada para Gmail
+        if (host.includes('gmail')) {
+            return nodemailer_1.default.createTransport({
+                service: 'gmail',
+                auth: { user, pass },
+                tls: { rejectUnauthorized: false },
+            });
+        }
         return nodemailer_1.default.createTransport({
             host,
             port,
             secure: port === 465,
             auth: { user, pass },
+            tls: { rejectUnauthorized: false },
         });
     }
     // Fallback a cuenta de prueba Ethereal en desarrollo para no bloquear envíos

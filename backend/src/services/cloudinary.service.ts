@@ -167,15 +167,8 @@ export class CloudinaryService {
         (error, result) => {
           clearTimeout(timer);
           if (error || !result) {
-            console.warn('⚠️ Cloudinary Image fallback:', error?.message);
-            const mockPublicId = `texxx_cld_img_${Date.now()}`;
-            return resolve({
-              secure_url: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop`,
-              public_id: mockPublicId,
-              resource_type: 'image',
-              format: 'jpg',
-              bytes: buffer.length,
-            });
+            console.warn('⚠️ Cloudinary Image upload failed:', error?.message);
+            return reject(new Error(error?.message || 'Error al subir imagen a Cloudinary'));
           }
 
           resolve({

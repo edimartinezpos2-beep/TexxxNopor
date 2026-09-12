@@ -229,8 +229,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
         if (res.code) {
           setGeneratedCodeDisplay(res.code);
           setResetCode(res.code);
+          Alert.alert(
+            '🔑 Código de Recuperación',
+            `Tu código de verificación es:\n\n👉  ${res.code}  👈\n\nHa sido ingresado automáticamente en el formulario. También se envió una notificación a ${email.trim()}.`,
+            [{ text: 'Entendido' }]
+          );
         }
-        setSuccessMessage(`Código enviado a ${email.trim()}. Ingrésalo a continuación.`);
+        setSuccessMessage(res.message || `Código enviado a ${email.trim()}. Ingrésalo a continuación.`);
       } else {
         setErrorMessage('No encontramos ninguna cuenta con ese correo electrónico.');
       }

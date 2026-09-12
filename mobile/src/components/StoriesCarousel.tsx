@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Plus, CheckCircle2, Sparkles, X, Camera, Image as ImageIcon, User } from 'lucide-react-native';
+import { Plus, CheckCircle2, Sparkles, X, Camera, Image as ImageIcon, User, Video as VideoIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ActorStoryGroup, api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -31,60 +31,80 @@ export const StoriesCarousel: React.FC<StoriesCarouselProps> = ({
   const { user, userToken } = useAuth();
   const [activeGroupIndex, setActiveGroupIndex] = useState<number | null>(null);
 
-  // Modal para crear historia (Creador o Admin)
+  // Modal para crear historia
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [pickedImageUri, setPickedImageUri] = useState<string | null>(null);
+  const [pickedMediaUri, setPickedMediaUri] = useState<string | null>(null);
+  const [pickedMediaType, setPickedMediaType] = useState<'IMAGE' | 'VIDEO'>('IMAGE');
   const [caption, setCaption] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-  const canPostStory = user?.role === 'CREATOR' || user?.role === 'ADMIN';
+  // Permitir a cualquier usuario autenticado (o creador/admin) compartir historias
+  const canPostStory = !!user;
 
-  const handlePickImage = async () => {
+  const handlePickMedia = async (typeFilter: 'ALL' | 'IMAGE' | 'VIDEO' = 'ALL') => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para subir historias.');
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos y videos para subir historias.');
         return;
       }
 
+      let mediaTypes = ImagePicker.MediaTypeOptions.All;
+      if (typeFilter === 'IMAGE') mediaTypes = ImagePicker.MediaTypeOptions.Images;
+      if (typeFilter === 'VIDEO') mediaTypes = ImagePicker.MediaTypeOptions.Videos;
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes,
         allowsEditing: true,
         aspect: [9, 16],
         quality: 0.85,
+        videoMaxDuration: 60,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPickedImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPickedMediaUri(asset.uri);
+        const isVideo = asset.type === 'video' || asset.uri.toLowerCase().endsWith('.mp4') || asset.uri.toLowerCase().endsWith('.mov');
+        setPickedMediaType(isVideo ? 'VIDEO' : 'IMAGE');
       }
     } catch (err: any) {
-      Alert.alert('Error', 'No se pudo seleccionar la imagen de la galería.');
+      Alert.alert('Error', 'No se pudo seleccionar el archivo multimedia.');
     }
   };
 
   const handlePublishStory = async () => {
-    if (!pickedImageUri || !userToken) return;
+    if (!pickedMediaUri || !userToken) return;
 
     setIsUploading(true);
     try {
-      // 1. Subir imagen a Cloudinary / Servidor local
-      const uploadRes = await api.cloudinary.uploadImageFile(userToken, pickedImageUri);
-      if (!uploadRes || !uploadRes.secure_url) {
-        throw new Error('No se pudo subir la imagen de la historia.');
+      let mediaUrl = '';
+
+      if (pickedMediaType === 'VIDEO') {
+        const uploadRes = await api.cloudinary.uploadVideoFile(userToken, pickedMediaUri);
+        if (!uploadRes || !uploadRes.secure_url) {
+          throw new Error('No se pudo procesar el video corto.');
+        }
+        mediaUrl = uploadRes.secure_url;
+      } else {
+        const uploadRes = await api.cloudinary.uploadImageFile(userToken, pickedMediaUri);
+        if (!uploadRes || !uploadRes.secure_url) {
+          throw new Error('No se pudo subir la foto de la historia.');
+        }
+        mediaUrl = uploadRes.secure_url;
       }
 
-      // 2. Crear historia de 24h
+      // Crear historia de 24h
       await api.stories.createStory(userToken, {
-        mediaUrl: uploadRes.secure_url,
-        mediaType: 'IMAGE',
+        mediaUrl,
+        mediaType: pickedMediaType,
         caption: caption.trim() || undefined,
       });
 
       setShowCreateModal(false);
-      setPickedImageUri(null);
+      setPickedMediaUri(null);
       setCaption('');
       onRefreshStories();
-      Alert.alert('¡Historia Publicada!', 'Tu historia de 24 horas ya está visible para todos los espectadores.');
+      Alert.alert('¡Historia Publicada!', 'Tu historia de 24 horas ya está visible para los espectadores.');
     } catch (err: any) {
       Alert.alert('Error al publicar', err.message || 'No se pudo publicar la historia.');
     } finally {
@@ -192,19 +212,75 @@ export const StoriesCarousel: React.FC<StoriesCarouselProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Selector de Foto */}
+            {/* Selector de Foto o Video */}
+            <View style={styles.mediaTypeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.mediaTypeTab,
+                  pickedMediaType === 'IMAGE' && styles.mediaTypeTabActive,
+                ]}
+                onPress={() => handlePickMedia('IMAGE')}
+                activeOpacity={0.8}
+              >
+                <ImageIcon size={16} color={pickedMediaType === 'IMAGE' ? '#CEFF00' : '#8E8E93'} />
+                <Text
+                  style={[
+                    styles.mediaTypeTabText,
+                    pickedMediaType === 'IMAGE' && styles.mediaTypeTabTextActive,
+                  ]}
+                >
+                  Foto
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.mediaTypeTab,
+                  pickedMediaType === 'VIDEO' && styles.mediaTypeTabActive,
+                ]}
+                onPress={() => handlePickMedia('VIDEO')}
+                activeOpacity={0.8}
+              >
+                <VideoIcon size={16} color={pickedMediaType === 'VIDEO' ? '#CEFF00' : '#8E8E93'} />
+                <Text
+                  style={[
+                    styles.mediaTypeTabText,
+                    pickedMediaType === 'VIDEO' && styles.mediaTypeTabTextActive,
+                  ]}
+                >
+                  Video Corto
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Selector / Vista Previa */}
             <TouchableOpacity
               style={styles.pickImageArea}
-              onPress={handlePickImage}
+              onPress={() => handlePickMedia('ALL')}
               activeOpacity={0.85}
             >
-              {pickedImageUri ? (
-                <Image source={{ uri: pickedImageUri }} style={styles.previewImage} />
+              {pickedMediaUri ? (
+                <View style={styles.previewContainer}>
+                  {pickedMediaType === 'VIDEO' ? (
+                    <View style={styles.videoPreviewPlaceholder}>
+                      <VideoIcon size={44} color="#CEFF00" />
+                      <Text style={styles.videoBadgeText}>✓ Video Corto Seleccionado</Text>
+                      <Text style={styles.videoBadgeSub}>Listo para publicar en historias de 24h</Text>
+                    </View>
+                  ) : (
+                    <Image source={{ uri: pickedMediaUri }} style={styles.previewImage} />
+                  )}
+                  <View style={styles.mediaTypeBadge}>
+                    <Text style={styles.mediaTypeBadgeText}>
+                      {pickedMediaType === 'VIDEO' ? '📹 VIDEO' : '📸 FOTO'}
+                    </Text>
+                  </View>
+                </View>
               ) : (
                 <View style={styles.pickImagePlaceholder}>
                   <Camera size={36} color="#FF2D55" />
-                  <Text style={styles.pickImageText}>Seleccionar Foto o Adelanto (9:16)</Text>
-                  <Text style={styles.pickImageSub}>Toca para abrir tu galería</Text>
+                  <Text style={styles.pickImageText}>Seleccionar Foto o Video Corto</Text>
+                  <Text style={styles.pickImageSub}>Toca aquí para abrir tu galería (24 horas)</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -212,7 +288,7 @@ export const StoriesCarousel: React.FC<StoriesCarouselProps> = ({
             {/* Pie de Foto Opcional */}
             <TextInput
               style={styles.captionInput}
-              placeholder="Escribe un mensaje o adelanto para tus seguidores..."
+              placeholder="Escribe un mensaje o descripción de tu historia..."
               placeholderTextColor="#777"
               value={caption}
               onChangeText={setCaption}
@@ -223,16 +299,18 @@ export const StoriesCarousel: React.FC<StoriesCarouselProps> = ({
             <TouchableOpacity
               style={[
                 styles.publishStoryBtn,
-                (!pickedImageUri || isUploading) && { opacity: 0.5 },
+                (!pickedMediaUri || isUploading) && { opacity: 0.5 },
               ]}
               onPress={handlePublishStory}
-              disabled={!pickedImageUri || isUploading}
+              disabled={!pickedMediaUri || isUploading}
               activeOpacity={0.85}
             >
               {isUploading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.publishStoryBtnText}>Publicar Historia (24h)</Text>
+                <Text style={styles.publishStoryBtnText}>
+                  {pickedMediaType === 'VIDEO' ? 'Publicar Video en Historias (24h)' : 'Publicar Foto en Historias (24h)'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -379,6 +457,74 @@ const styles = StyleSheet.create({
   publishStoryBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: 'bold',
+  },
+  mediaTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  mediaTypeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: '#1C1C26',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A38',
+  },
+  mediaTypeTabActive: {
+    backgroundColor: 'rgba(206, 255, 0, 0.1)',
+    borderColor: '#CEFF00',
+  },
+  mediaTypeTabText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  mediaTypeTabTextActive: {
+    color: '#CEFF00',
+    fontWeight: 'bold',
+  },
+  previewContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPreviewPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+  },
+  videoBadgeText: {
+    color: '#CEFF00',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  videoBadgeSub: {
+    color: '#8E8E93',
+    fontSize: 12,
+  },
+  mediaTypeBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  mediaTypeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: 'bold',
   },
 });
