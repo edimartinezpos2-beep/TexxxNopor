@@ -15,7 +15,9 @@ import { AlertTriangle, Download, Sparkles, CheckCircle2, ShieldAlert } from 'lu
 import { api } from '../services/api';
 import { COLORS } from '../theme/colors';
 
-const APP_VERSION = '1.0.2'; // Versión compilada actual
+// Lee la versión real desde app.json para evitar que sea desincronizada con el build
+const appJson = require('../../../app.json');
+const APP_VERSION: string = appJson?.expo?.version ?? '2.4.3';
 
 export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isChecking, setIsChecking] = useState(true);
