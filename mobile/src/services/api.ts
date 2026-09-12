@@ -306,12 +306,13 @@ export const api = {
 
     async createPlaylist(
       token: string,
-      data: { title: string; description?: string; isPrivate?: boolean; coverUrl?: string }
+      data: string | { title: string; description?: string; isPrivate?: boolean; coverUrl?: string }
     ): Promise<{ status: string; playlist: any } | null> {
+      const payload = typeof data === 'string' ? { title: data } : data;
       return await apiFetch<{ status: string; playlist: any }>('/api/user/playlists', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
         throwOnError: true,
       });
     },
@@ -604,6 +605,13 @@ export const api = {
       });
       return true;
     },
+
+    async toggleFollow(
+      actorId: string,
+      token: string
+    ): Promise<{ isFollowing: boolean; followersCount: number }> {
+      return api.creators.toggleFollow(token, actorId);
+    },
   },
 
   // ====================================================
@@ -676,7 +684,7 @@ export const api = {
     async getFeed(
       token?: string | null,
       userId?: string,
-      filters?: { category?: string; query?: string; tag?: string; page?: number; limit?: number }
+      filters?: { category?: string; query?: string; tag?: string; sort?: string; page?: number; limit?: number }
     ): Promise<VideoItem[]> {
       const params = new URLSearchParams();
       if (userId) params.append('userId', userId);
@@ -685,6 +693,7 @@ export const api = {
       }
       if (filters?.query) params.append('q', filters.query);
       if (filters?.tag) params.append('tag', filters.tag);
+      if (filters?.sort) params.append('sort', filters.sort);
       if (filters?.page) params.append('page', String(filters.page));
       if (filters?.limit) params.append('limit', String(filters.limit));
 

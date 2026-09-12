@@ -13,6 +13,7 @@ import {
   Platform,
   Alert,
   Share,
+  Modal,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -31,6 +32,7 @@ import {
   Download,
   DownloadCloud,
   Check,
+  X,
 } from 'lucide-react-native';
 import { HLSVideoPlayer } from '../components/HLSVideoPlayer';
 import { useTheme } from '../context/ThemeContext';

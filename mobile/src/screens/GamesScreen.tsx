@@ -246,7 +246,7 @@ export const GamesScreen: React.FC = () => {
       duration: 3500,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-    }).then(() => {
+    }).start(() => {
       const prizeIndex = Math.floor(Math.random() * prizes.length);
       const wonPrize = prizes[prizeIndex];
       setWheelResult(wonPrize);

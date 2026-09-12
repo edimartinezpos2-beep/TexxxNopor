@@ -192,7 +192,8 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={[styles.overlay, { backgroundColor: colors.overlayDark }]}>
           <TouchableWithoutFeedback onPress={() => {}}>
@@ -435,8 +436,12 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
 
                 <View style={{ height: 30 }} />
               </ScrollView>
-            </View>
-          </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* Modal Dedicado de Reporte de Video (Cancelable y con Cierre Seguro) */}
       <Modal visible={showReportModal} transparent animationType="fade" onRequestClose={() => setShowReportModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowReportModal(false)}>
@@ -513,7 +518,7 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </Modal>
+    </>
   );
 };
 
