@@ -2142,11 +2142,34 @@ function compareSemVer(v1, v2) {
     return 0;
 }
 app.get('/api/app/version-check', (req, res) => {
-    const clientVersion = String(req.query.version || '1.0.0');
-    const platform = String(req.query.platform || 'android');
-    const latestVersion = process.env.APP_LATEST_VERSION || '1.0.2';
-    const minSupportedVersion = process.env.APP_MIN_SUPPORTED_VERSION || '1.0.2';
-    // Si la versión del cliente es inferior a la mínima permitida, bloquear uso y forzar actualización
+    const clientVersion = String(req.query.version || '2.4.3');
+    const platform = String(req.query.platform || 'android').toLowerCase();
+    const latestVersion = process.env.APP_LATEST_VERSION || '2.4.3';
+    const minSupportedVersion = process.env.APP_MIN_SUPPORTED_VERSION || '2.4.3';
+    // En plataforma web, la aplicación se actualiza de forma automática en el navegador (nunca bloquear)
+    if (platform === 'web') {
+        return res.json({
+            clientVersion,
+            latestVersion,
+            minSupportedVersion,
+            isOutdated: false,
+            forceUpdate: false,
+            platform: 'web',
+            updateUrl: process.env.APP_UPDATE_URL || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest',
+            webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-backend.onrender.com',
+            title: 'Plataforma Web Actualizada',
+            message: 'La versión web se encuentra en su versión más reciente con actualización automática.',
+            releaseNotes: [
+                'Historias efímeras de 24h con fotos y videos cortos en alta definición',
+                'Corrección total de fotos de perfil (subida y visualización de fotos reales sin reemplazo falso)',
+                'Recuperación inmediata de contraseña mediante código OTP de 6 dígitos',
+                'Sesión persistente en móvil y web (no se cierra la sesión al recargar o reiniciar)',
+                'Streaming 4K Ultra HD optimizado sin cortes',
+                'Pasarela de pagos oficial Wompi (Bancolombia, PSE, Nequi y Tarjetas)',
+            ],
+        });
+    }
+    // Si la versión del cliente móvil es inferior a la mínima permitida, bloquear uso y forzar actualización
     const isOutdated = compareSemVer(clientVersion, minSupportedVersion) < 0;
     return res.json({
         clientVersion,
@@ -2163,10 +2186,12 @@ app.get('/api/app/version-check', (req, res) => {
             ? `Tu versión (${clientVersion}) ha caducado y ya no es compatible. Para continuar usando TexxxNopor debes actualizar a la versión ${latestVersion}.`
             : 'Estás utilizando la versión oficial más reciente de TexxxNopor.',
         releaseNotes: [
-            'Planes en Pesos Colombianos ($10.000 COP / mes)',
-            'Pasarela de pagos oficial Wompi (PSE, Nequi, Bancolombia, Tarjetas)',
-            'Optimización de streaming 4K Ultra HD',
-            'Mayor seguridad y recuperación rápida de contraseña',
+            'Historias efímeras de 24h con fotos y videos cortos en alta definición',
+            'Corrección total de fotos de perfil (subida y visualización de fotos reales sin reemplazo falso)',
+            'Recuperación inmediata de contraseña mediante código OTP de 6 dígitos',
+            'Sesión persistente en móvil y web (no se cierra la sesión al recargar o reiniciar)',
+            'Streaming 4K Ultra HD optimizado sin cortes',
+            'Pasarela de pagos oficial Wompi (Bancolombia, PSE, Nequi y Tarjetas)',
         ],
     });
 });

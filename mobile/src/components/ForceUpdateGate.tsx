@@ -6,20 +6,32 @@ import {
   Modal,
   TouchableOpacity,
   Linking,
-  ActivityIndicator,
   Platform,
   StatusBar,
   ScrollView,
 } from 'react-native';
-import { AlertTriangle, Download, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react-native';
+import { Download, CheckCircle2, ShieldAlert, Globe } from 'lucide-react-native';
 import { api } from '../services/api';
 import { COLORS } from '../theme/colors';
 
-// Lee la versión real desde app.json para evitar que sea desincronizada con el build
-const appJson = require('../../../app.json');
-const APP_VERSION: string = appJson?.expo?.version ?? '2.4.3';
+// Lee la versión real desde app.json (2 niveles arriba: mobile/src/components -> mobile/app.json)
+let resolvedVersion = '2.4.3';
+try {
+  const appJson = require('../../app.json');
+  if (appJson?.expo?.version) {
+    resolvedVersion = appJson.expo.version;
+  }
+} catch {
+  resolvedVersion = '2.4.3';
+}
+const APP_VERSION: string = resolvedVersion;
 
 export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // En versión Web, la aplicación se actualiza de forma automática en el navegador (nunca mostrar ventana de force update)
+  if (Platform.OS === 'web') {
+    return <>{children}</>;
+  }
+
   const [isChecking, setIsChecking] = useState(true);
   const [isOutdated, setIsOutdated] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
@@ -28,6 +40,7 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
     title: string;
     message: string;
     updateUrl: string;
+    webUrl?: string;
     releaseNotes?: string[];
   } | null>(null);
 
@@ -50,7 +63,8 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const handleUpdate = () => {
+  // Botón 1: Descargar el APK / última versión
+  const handleDownloadUpdate = () => {
     const targetUrl =
       updateInfo?.updateUrl || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
     Linking.openURL(targetUrl).catch(() => {
@@ -58,11 +72,19 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
+  // Botón 2: Redireccionar a la página web principal
+  const handleGoToWeb = () => {
+    const webUrl = updateInfo?.webUrl || 'https://texxxnopor-backend.onrender.com';
+    Linking.openURL(webUrl).catch(() => {});
+  };
+
+  const latestVer = updateInfo?.latestVersion || APP_VERSION;
+
   return (
     <>
       {children}
 
-      {/* Modal de Bloqueo por Caducidad de Versión (Force Update) */}
+      {/* Modal de Bloqueo por Caducidad de Versión (Force Update) solo en Móvil */}
       <Modal visible={isOutdated} animationType="fade" transparent={false} onRequestClose={() => {}}>
         <View style={styles.container}>
           <StatusBar barStyle="light-content" backgroundColor="#0B0B0F" />
@@ -78,7 +100,7 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
             {/* Badge de Versión Caducada */}
             <View style={styles.badgeRow}>
               <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>VERSIÓN {APP_VERSION} CADUCADA</Text>
+                <Text style={styles.expiredBadgeText}>VERSIÓN v{APP_VERSION} CADUCADA</Text>
               </View>
             </View>
 
@@ -88,35 +110,35 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
 
             <Text style={styles.subtitle}>
               {updateInfo?.message ||
-                `Esta versión de la aplicación ha sido desactivada. Para continuar disfrutando del catálogo 4K y pasarela de pagos debes actualizar a la versión ${
-                  updateInfo?.latestVersion || '1.0.2'
-                }.`}
+                `Esta versión de la aplicación ha sido desactivada. Para continuar disfrutando del catálogo 4K, historias efímeras y pasarela de pagos debes actualizar a la versión ${latestVer}.`}
             </Text>
 
             {/* Comparativa de Versiones */}
             <View style={styles.versionCard}>
               <View style={styles.versionRow}>
-                <Text style={styles.versionLabel}>Tu versión actual:</Text>
+                <Text style={styles.versionLabel}>Tu versión instalada:</Text>
                 <Text style={[styles.versionValue, { color: '#FF3B30' }]}>v{APP_VERSION} (Descontinuada)</Text>
               </View>
               <View style={styles.versionDivider} />
               <View style={styles.versionRow}>
                 <Text style={styles.versionLabel}>Nueva versión oficial:</Text>
                 <Text style={[styles.versionValue, { color: '#30D158' }]}>
-                  v{updateInfo?.latestVersion || '1.0.2'} (Requerida)
+                  v{latestVer} (Requerida)
                 </Text>
               </View>
             </View>
 
             {/* Novedades de la Nueva Versión */}
-            <Text style={styles.notesHeader}>Novedades de la actualización:</Text>
+            <Text style={styles.notesHeader}>Especificaciones de la actualización:</Text>
             <View style={styles.notesContainer}>
               {(
                 updateInfo?.releaseNotes || [
-                  'Planes en Pesos Colombianos ($10.000 COP / mes)',
-                  'Integración oficial Wompi (Bancolombia, PSE, Nequi y Tarjetas)',
-                  'Streaming 4K Ultra HD optimizado sin interrupciones',
-                  'Mayor seguridad y recuperación instantánea de cuentas',
+                  'Historias efímeras de 24h con fotos y videos cortos en alta definición',
+                  'Corrección total de fotos de perfil (se suben y muestran tus fotos reales)',
+                  'Recuperación inmediata de contraseña mediante código OTP de 6 dígitos',
+                  'Sesión persistente en móvil y web (no tendrás que iniciar sesión cada vez)',
+                  'Streaming 4K Ultra HD optimizado sin cortes',
+                  'Pasarela de pagos oficial Wompi (Bancolombia, PSE, Nequi y Tarjetas)',
                 ]
               ).map((note, idx) => (
                 <View key={idx} style={styles.noteItem}>
@@ -126,11 +148,19 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
               ))}
             </View>
 
-            {/* Botón Principal de Actualización */}
-            <TouchableOpacity style={styles.updateBtn} onPress={handleUpdate} activeOpacity={0.85}>
+            {/* BOTÓN 1: Descargar Actualización */}
+            <TouchableOpacity style={styles.updateBtn} onPress={handleDownloadUpdate} activeOpacity={0.85}>
               <Download size={20} color="#000000" />
               <Text style={styles.updateBtnText}>
-                Descargar e Instalar v{updateInfo?.latestVersion || '1.0.2'}
+                Descargar e Instalar v{latestVer}
+              </Text>
+            </TouchableOpacity>
+
+            {/* BOTÓN 2: Redireccionar a la Página Web Principal */}
+            <TouchableOpacity style={styles.webBtn} onPress={handleGoToWeb} activeOpacity={0.85}>
+              <Globe size={18} color="#FFFFFF" />
+              <Text style={styles.webBtnText}>
+                Ir a la Página Web Principal
               </Text>
             </TouchableOpacity>
 
@@ -264,12 +294,30 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 16,
     borderRadius: 14,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   updateBtnText: {
     color: '#000000',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  webBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#1C1C26',
+    borderWidth: 1,
+    borderColor: '#38384A',
+    width: '100%',
+    paddingVertical: 15,
+    borderRadius: 14,
+    marginBottom: 16,
+  },
+  webBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   securityFooterText: {
     color: '#666675',
