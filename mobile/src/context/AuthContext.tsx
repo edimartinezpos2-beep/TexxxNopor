@@ -30,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: `${newRole.toLowerCase()}@texxxnopor.com`,
         username: newRole === 'CREATOR' ? 'Luna Roja (Actor)' : newRole === 'ADMIN' ? 'AdminMaster' : 'Alex99',
         role: newRole,
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+        avatarUrl: newRole === 'CONSUMER' ? undefined : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
         isVerified: newRole !== 'CONSUMER',
       });
       setUserToken(`token_${newRole}`);

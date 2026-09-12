@@ -65,6 +65,7 @@ import { NotificationsModal } from '../components/NotificationsModal';
 import { OfflineDownloadsModal } from '../components/OfflineDownloadsModal';
 import { offlineStorage } from '../services/offlineStorage';
 import { PrivacyPolicyModal } from '../components/PrivacyPolicyModal';
+import { appSettingsService, CurrencyType, ColumnLayoutType } from '../services/appSettings';
 
 interface ProfileScreenProps {
   onSelectVideo?: (video: any) => void;
@@ -92,6 +93,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [showBecomeActorModal, setShowBecomeActorModal] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
   const [actorStageName, setActorStageName] = useState('');
   const [actorBio, setActorBio] = useState('');
@@ -108,8 +110,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [loadingModal, setLoadingModal] = useState(false);
 
   // Estados interactivos para las opciones de Interfaz de Usuario
-  const [currency, setCurrency] = useState<'COP' | 'USD' | 'EUR' | 'MXN'>('COP');
-  const [columnLayout, setColumnLayout] = useState<'1 columna' | '2 columnas' | '4 columnas'>('4 columnas');
+  const [currency, setCurrency] = useState<CurrencyType>('COP');
+  const [columnLayout, setColumnLayout] = useState<ColumnLayoutType>('4 columnas');
 
   // Switches interactivos
   const [largeUI, setLargeUI] = useState(false);
@@ -118,6 +120,48 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
   const [likedVideosPage, setLikedVideosPage] = useState(true);
   const [watchedIcon, setWatchedIcon] = useState(true);
   const [autoTranslateTitles, setAutoTranslateTitles] = useState(true);
+
+  // Cargar configuraciones persistentes
+  useEffect(() => {
+    appSettingsService.getSettings().then((s) => {
+      setCurrency(s.currency);
+      setColumnLayout(s.columnLayout);
+      setLargeUI(s.largeUI);
+      setVideoPreview(s.videoPreview);
+      setWatchLaterBtn(s.watchLaterBtn);
+      setAutoTranslateTitles(s.autoTranslateTitles);
+    });
+  }, []);
+
+  const handleUpdateCurrency = (curr: CurrencyType) => {
+    setCurrency(curr);
+    appSettingsService.saveSettings({ currency: curr });
+  };
+
+  const handleUpdateColumnLayout = (col: ColumnLayoutType) => {
+    setColumnLayout(col);
+    appSettingsService.saveSettings({ columnLayout: col });
+  };
+
+  const handleToggleLargeUI = (val: boolean) => {
+    setLargeUI(val);
+    appSettingsService.saveSettings({ largeUI: val });
+  };
+
+  const handleToggleVideoPreview = (val: boolean) => {
+    setVideoPreview(val);
+    appSettingsService.saveSettings({ videoPreview: val });
+  };
+
+  const handleToggleWatchLaterBtn = (val: boolean) => {
+    setWatchLaterBtn(val);
+    appSettingsService.saveSettings({ watchLaterBtn: val });
+  };
+
+  const handleToggleAutoTranslateTitles = (val: boolean) => {
+    setAutoTranslateTitles(val);
+    appSettingsService.saveSettings({ autoTranslateTitles: val });
+  };
 
   // Selectores desplegables
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
@@ -243,32 +287,44 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
     }
   };
 
-  // Solicitud de baja o desactivación de cuenta y datos conforme a la Política de Privacidad (+18)
+  // Eliminación definitiva de cuenta y liberación de correo
   const handleRequestAccountDeletion = () => {
-    const title = 'Solicitud de Baja / Desactivación de Cuenta';
+    const title = 'Eliminar Cuenta Definitivamente';
     const message =
-      'Conforme a nuestras Políticas de Privacidad y regulaciones legales para plataformas de contenido adulto (+18):\n\n' +
-      '• Tu perfil público, comentarios y acceso a la cuenta se desactivarán de forma inmediata.\n' +
-      '• RETENCIÓN POR OBLIGACIÓN LEGAL: Determinados registros esenciales (verificación de mayoría de edad +18, comprobantes de transacciones financieras y logs de auditoría/seguridad) se conservarán archivados confidencialmente conforme a la ley para responder ante autoridades y prevenir fraudes.\n\n' +
-      '¿Deseas confirmar la desactivación de tu perfil?';
+      'Esta acción eliminará de forma permanente tu cuenta, perfil, Me Gusta, historial, listas y suscripciones.\n\n' +
+      'Una vez eliminada, tu correo quedará completamente liberado para registrar una nueva cuenta si lo deseas.\n\n' +
+      '¿Estás seguro de que deseas eliminar permanentemente tu cuenta?';
 
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`)) {
-        signOut();
-        alert('Tu cuenta ha sido desactivada. Los registros de respaldo legal han sido archivados según la Política de Privacidad.');
+        if (userToken) {
+          api.user.deleteAccount(userToken).finally(() => {
+            signOut();
+            alert('Tu cuenta ha sido eliminada permanentemente. Tu correo ya no está registrado.');
+          });
+        } else {
+          signOut();
+        }
       }
     } else {
       Alert.alert(title, message, [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Entendido, Desactivar',
+          text: 'Eliminar Definitivamente',
           style: 'destructive',
-          onPress: () => {
-            signOut();
-            Alert.alert(
-              'Cuenta Desactivada',
-              'Tu sesión ha sido cerrada y tu perfil público desactivado. Los registros de respaldo legal han sido archivados conforme a la Política de Privacidad.'
-            );
+          onPress: async () => {
+            try {
+              if (userToken) {
+                await api.user.deleteAccount(userToken);
+              }
+              signOut();
+              Alert.alert(
+                'Cuenta Eliminada',
+                'Tu cuenta ha sido eliminada de la base de datos. Tu correo ha quedado completamente liberado.'
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'No se pudo eliminar la cuenta. Intenta nuevamente.');
+            }
           },
         },
       ]);
@@ -875,7 +931,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
                     currency === curr && [styles.dropdownOptionSelected, { backgroundColor: colors.primaryGlow }],
                   ]}
                   onPress={() => {
-                    setCurrency(curr);
+                    handleUpdateCurrency(curr);
                     setShowCurrencyPicker(false);
                   }}
                 >
@@ -922,7 +978,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
                     columnLayout === col && [styles.dropdownOptionSelected, { backgroundColor: colors.primaryGlow }],
                   ]}
                   onPress={() => {
-                    setColumnLayout(col);
+                    handleUpdateColumnLayout(col);
                     setShowColumnPicker(false);
                   }}
                 >
@@ -949,7 +1005,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <Switch
               value={largeUI}
-              onValueChange={setLargeUI}
+              onValueChange={handleToggleLargeUI}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -963,7 +1019,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <Switch
               value={videoPreview}
-              onValueChange={setVideoPreview}
+              onValueChange={handleToggleVideoPreview}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -977,7 +1033,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <Switch
               value={watchLaterBtn}
-              onValueChange={setWatchLaterBtn}
+              onValueChange={handleToggleWatchLaterBtn}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -991,7 +1047,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
             </View>
             <Switch
               value={autoTranslateTitles}
-              onValueChange={setAutoTranslateTitles}
+              onValueChange={handleToggleAutoTranslateTitles}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
@@ -1008,13 +1064,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
           </View>
 
           {/* Verificación de seguridad */}
-          <View style={[styles.menuRow, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomColor: colors.border }]}
+            onPress={() => setShowSecurityModal(true)}
+            activeOpacity={0.7}
+          >
             <View style={styles.menuLeft}>
               <ShieldCheck size={19} color={colors.primary} />
               <Text style={[styles.menuLabel, { color: colors.textPrimary }]}>Seguridad TexxxNopor 18+</Text>
             </View>
-            <CheckCircle2 size={18} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
-          </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ color: colors.verifiedBlue, fontSize: 12, fontWeight: 'bold' }}>Protegido</Text>
+              <CheckCircle2 size={18} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
+            </View>
+          </TouchableOpacity>
 
           {/* Política de Privacidad y Datos */}
           <TouchableOpacity
@@ -1453,6 +1516,81 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
         visible={showPrivacyPolicy}
         onClose={() => setShowPrivacyPolicy(false)}
       />
+
+      {/* MODAL DE SEGURIDAD TEXXXNOPOR 18+ */}
+      <Modal
+        visible={showSecurityModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSecurityModal(false)}
+      >
+        <View style={styles.actorModalOverlay}>
+          <View style={[styles.actorModalBox, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+            <View style={styles.actorModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ShieldCheck size={22} color={colors.primary} />
+                <Text style={[styles.actorModalTitle, { color: colors.textPrimary }]}>
+                  Seguridad TexxxNopor 18+
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSecurityModal(false)} style={styles.closeModalBtn}>
+                <X size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              <View style={{ paddingVertical: 8, gap: 14 }}>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                  <CheckCircle2 size={20} color={colors.verifiedBlue} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Verificación de Mayoría de Edad (+18)</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 }}>
+                      Validación obligatoria de fecha de nacimiento y cálculo de edad para garantizar el cumplimiento legal y acceso exclusivo para mayores de edad.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                  <Lock size={20} color="#30D158" style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Cifrado SSL/TLS 256 bits</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 }}>
+                      Todas las transmisiones entre la app, PostgreSQL y los servidores de streaming HLS están protegidas con cifrado simétrico y asimétrico de nivel bancario.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                  <ShieldCheck size={20} color={colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Hashing Criptográfico de Contraseñas</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 }}>
+                      Tus credenciales nunca se almacenan en texto plano; están blindadas con algoritmo bcrypt y salt rounds de alta seguridad.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                  <Banknote size={20} color="#FF9500" style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Pasarela de Pago Certificada PCI-DSS</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 }}>
+                      Los pagos de planes creadores y suscripciones se gestionan vía Wompi Bancolombia bajo los más estrictos estándares de la industria bancaria.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.actorPayBtn, { backgroundColor: colors.primary, marginTop: 16 }]}
+              onPress={() => setShowSecurityModal(false)}
+            >
+              <Text style={styles.actorPayBtnText}>Entendido</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

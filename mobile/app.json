@@ -3,7 +3,7 @@
     "name": "TexxxNopor",
     "slug": "texxxnopor-mobile",
     "scheme": "texxxnopor",
-    "version": "1.4.1",
+    "version": "2.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

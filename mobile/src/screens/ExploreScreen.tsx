@@ -18,9 +18,10 @@ import { useAuth } from '../context/AuthContext';
 
 interface ExploreScreenProps {
   onSelectVideo?: (video: VideoItem) => void;
+  onViewActor?: (actorId?: string, actorName?: string) => void;
 }
 
-export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onSelectVideo }) => {
+export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onSelectVideo, onViewActor }) => {
   const { userToken, user } = useAuth();
   const [query, setQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -51,9 +52,11 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onSelectVideo }) =
   const searchVideos = async (searchText: string, tagText?: string | null) => {
     setLoading(true);
     try {
+      const isNewest = tagText === '#nuevos';
       const data = await api.videos.getFeed(userToken, user?.id, {
         query: searchText || undefined,
         tag: tagText || undefined,
+        sort: isNewest ? 'newest' : undefined,
       });
       setVideos(data);
     } catch (err) {
@@ -79,6 +82,8 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onSelectVideo }) =
     if (catName === 'Para ti') {
       setSelectedTag(null);
       setQuery('');
+    } else if (catName === 'Nuevos') {
+      setSelectedTag('#nuevos');
     } else {
       setSelectedTag(`#${catName.toLowerCase().replace(/\s+/g, '')}`);
     }
@@ -196,7 +201,19 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onSelectVideo }) =
                   <Text style={styles.gridTitle} numberOfLines={1}>
                     {item.title}
                   </Text>
-                  <Text style={styles.gridMeta}>{item.actorName || 'Actor'} · {item.views}</Text>
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      if (onViewActor) {
+                        onViewActor(item.actorId, item.actorName);
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.gridMeta, { color: COLORS.neonLime }]}>
+                      {item.actorName || 'Actor'} · {item.views}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             ))}

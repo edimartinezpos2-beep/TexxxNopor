@@ -36,6 +36,7 @@ import {
   Receipt,
   ArrowRight,
   Banknote,
+  Gamepad2,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -121,38 +122,39 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
     {
       id: '1_month',
       name: '1 Mes VIP',
-      price: '$10.000 COP',
-      billing: '$10.000 COP facturado al mes',
+      price: '$15.000 COP',
+      billing: '$15.000 COP facturado al mes',
       badge: 'PLAN RECOMENDADO',
-      amount: 10000,
+      amount: 15000,
     },
     {
       id: '3_months',
       name: '3 Meses VIP',
-      price: '$25.000 COP',
-      billing: '$8.333 COP / mes ($25.000 COP total)',
-      badge: 'AHORRA 15%',
-      amount: 25000,
+      price: '$35.000 COP',
+      billing: '$11.666 COP / mes ($35.000 COP total)',
+      badge: 'AHORRA 22%',
+      amount: 35000,
     },
     {
       id: '6_months',
       name: '6 Meses VIP',
-      price: '$45.000 COP',
-      billing: '$7.500 COP / mes ($45.000 COP total)',
-      badge: 'MÁS POPULAR · AHORRA 25%',
-      amount: 45000,
+      price: '$60.000 COP',
+      billing: '$10.000 COP / mes ($60.000 COP total)',
+      badge: 'MÁS POPULAR · AHORRA 33%',
+      amount: 60000,
     },
     {
       id: '12_months',
       name: '12 Meses VIP',
-      price: '$80.000 COP',
-      billing: '$6.666 COP / mes ($80.000 COP total)',
-      badge: 'MEJOR PRECIO · AHORRA 35%',
-      amount: 80000,
+      price: '$99.000 COP',
+      billing: '$8.250 COP / mes ($99.000 COP total)',
+      badge: 'MEJOR PRECIO · AHORRA 45%',
+      amount: 99000,
     },
   ];
 
   const perks = [
+    { icon: Gamepad2, title: 'Acceso Total a TexxxGames +18', desc: 'Juega sin límites a videojuegos Nutaku, Ruleta de la Pasión y Strip Memory con 1,000 Gemas VIP.' },
     { icon: Tv, title: 'Calidad 4K Ultra HD', desc: 'Disfruta todas las producciones a máxima resolución sin compresión.' },
     { icon: EyeOff, title: '100% Sin Publicidad', desc: 'Cero anuncios molestos, navegación limpia y fluida.' },
     { icon: Sparkles, title: 'Contenido Exclusivo RED', desc: 'Acceso total a escenas VIP y estrenos anticipados de actrices.' },

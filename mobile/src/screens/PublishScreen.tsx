@@ -521,14 +521,16 @@ export const PublishScreen: React.FC = () => {
         </View>
 
         <View style={styles.avatarContainer}>
-          <Image
-            source={{
-              uri:
-                user?.avatarUrl ||
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-            }}
-            style={styles.headerAvatar}
-          />
+          {user?.avatarUrl ? (
+            <Image
+              source={{ uri: user.avatarUrl }}
+              style={styles.headerAvatar}
+            />
+          ) : (
+            <View style={[styles.headerAvatar, { backgroundColor: '#262626', justifyContent: 'center', alignItems: 'center' }]}>
+              <User size={18} color="#888888" />
+            </View>
+          )}
           <View style={styles.onlineDot} />
         </View>
       </View>

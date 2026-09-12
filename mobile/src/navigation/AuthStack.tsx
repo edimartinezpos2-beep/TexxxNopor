@@ -53,7 +53,53 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [age, setAge] = useState('');
+  const [birthDateText, setBirthDateText] = useState('');
   const [isOver18, setIsOver18] = useState(true);
+
+  // Helper para calcular edad exacta desde DD/MM/AAAA
+  const calculateAgeFromDate = (dateStr: string): number | null => {
+    const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
+    if (parts.length !== 3) return null;
+    let day = 0;
+    let month = 0;
+    let year = 0;
+    if (dateStr.includes('/')) {
+      day = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10) - 1;
+      year = parseInt(parts[2], 10);
+    } else {
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10) - 1;
+      day = parseInt(parts[2], 10);
+    }
+    if (!day || !year || isNaN(month) || year < 1900 || year > new Date().getFullYear()) return null;
+    const bDate = new Date(year, month, day);
+    if (isNaN(bDate.getTime())) return null;
+    const today = new Date();
+    let calculatedAge = today.getFullYear() - bDate.getFullYear();
+    const m = today.getMonth() - bDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) {
+      calculatedAge--;
+    }
+    return calculatedAge;
+  };
+
+  const handleBirthDateChange = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 2 && cleaned.length <= 4) {
+      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+    } else if (cleaned.length > 4) {
+      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
+    }
+    setBirthDateText(formatted);
+    if (formatted.length === 10) {
+      const calcAge = calculateAgeFromDate(formatted);
+      if (calcAge !== null) {
+        setAge(calcAge.toString());
+      }
+    }
+  };
 
   // Password Recovery Fields
   const [resetCode, setResetCode] = useState('');
@@ -91,17 +137,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
       return;
     }
 
+    let calculatedAge = parseInt(age, 10);
+    let isoBirthDate: string | undefined = undefined;
+
     if (authMode === 'REGISTER') {
       if (!username.trim()) {
         setErrorMessage('Por favor ingresa un nombre de usuario.');
         return;
       }
 
-      const parsedAge = parseInt(age, 10);
-      if (isNaN(parsedAge) || parsedAge < 18) {
-        setErrorMessage('Acceso restringido: Debes tener al menos 18 años para registrarte.');
+      if (!birthDateText.trim()) {
+        setErrorMessage('Por favor ingresa tu fecha de nacimiento (DD/MM/AAAA).');
         return;
       }
+
+      const parsedAge = calculateAgeFromDate(birthDateText.trim());
+      if (parsedAge === null) {
+        setErrorMessage('Fecha de nacimiento inválida. Usa el formato DD/MM/AAAA.');
+        return;
+      }
+
+      if (parsedAge < 18) {
+        setErrorMessage(`Acceso restringido: Tienes ${parsedAge} años. Debes tener al menos 18 años para registrarte.`);
+        return;
+      }
+
+      calculatedAge = parsedAge;
+      const parts = birthDateText.split('/');
+      isoBirthDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
 
       if (!isOver18) {
         setErrorMessage('Debes confirmar que eres mayor de 18 años para continuar.');
@@ -116,9 +179,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           email.trim(),
           username.trim(),
           password,
-          parseInt(age, 10) || 18,
+          calculatedAge || 18,
           isOver18,
-          'CONSUMER'
+          'CONSUMER',
+          isoBirthDate
         );
         await signIn(res.token, res.user);
 
@@ -560,21 +624,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
               <>
                 <View style={styles.inputGroup}>
                   <View style={styles.ageLabelRow}>
-                    <Text style={styles.inputLabel}>Tu Edad (Años) *</Text>
+                    <Text style={styles.inputLabel}>Fecha de Nacimiento (DD/MM/AAAA) *</Text>
                     <View style={styles.required18Pill}>
-                      <Text style={styles.required18Text}>Mínimo 18 años</Text>
+                      <Text style={styles.required18Text}>
+                        {age ? `${age} años · +18 Verificado` : 'Mínimo 18 años'}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.inputWrapper}>
                     <Calendar size={16} color="#777780" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Ej. 24"
+                      placeholder="DD/MM/AAAA (Ej. 15/08/2002)"
                       placeholderTextColor="#55555C"
-                      value={age}
-                      onChangeText={setAge}
+                      value={birthDateText}
+                      onChangeText={handleBirthDateChange}
                       keyboardType="number-pad"
-                      maxLength={2}
+                      maxLength={10}
                     />
                   </View>
                 </View>

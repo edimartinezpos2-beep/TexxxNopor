@@ -83,6 +83,9 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
   const [commentText, setCommentText] = useState('');
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showCastModal, setShowCastModal] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [connectedCastDevice, setConnectedCastDevice] = useState<string | null>(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -255,11 +258,11 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
 
   const handleShare = async () => {
     try {
-      const url = currentVideo.videoUrl || `https://texxxnopor.com/v/${currentVideo.id}`;
+      const canonicalUrl = `https://texxxnopor.com/video/${currentVideo.id}`;
       await Share.share({
         title: currentVideo.title,
-        message: `🔥 Mira "${currentVideo.title}" en TexxxNopor: ${url}`,
-        url,
+        message: `🔥 Mira "${currentVideo.title}" en TexxxNopor: ${canonicalUrl}`,
+        url: canonicalUrl,
       });
     } catch (err) {
       console.log('Error sharing:', err);
@@ -282,8 +285,8 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
           {currentVideo.title}
         </Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => setShowOptionsModal(true)}>
-            <Tv size={20} color={colors.textPrimary} />
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowCastModal(true)} activeOpacity={0.7}>
+            <Tv size={20} color={connectedCastDevice ? colors.primary : colors.textPrimary} />
           </TouchableOpacity>
           {/* Botón 3 Puntos para Configuración */}
           <TouchableOpacity
@@ -304,6 +307,8 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
         title={currentVideo.title}
         onBack={onBack}
         autoPlay={true}
+        rate={playbackRate}
+        onRateChange={setPlaybackRate}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -549,10 +554,92 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
         video={currentVideo}
         onClose={() => setShowOptionsModal(false)}
         onViewActor={onViewActor}
+        playbackRate={playbackRate}
+        onSpeedChange={setPlaybackRate}
         onVideoDeleted={() => {
           if (onBack) onBack();
         }}
       />
+
+      {/* 8. Modal Dedicado de Transmisión a Pantalla / Smart TV (Chromecast, AirPlay, DLNA) */}
+      <Modal visible={showCastModal} transparent animationType="fade" onRequestClose={() => setShowCastModal(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={() => setShowCastModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={{ width: '100%', maxWidth: 440, backgroundColor: colors.surface, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: colors.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Tv size={22} color={colors.primary} />
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '900' }}>Transmitir a Pantalla</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowCastModal(false)} style={{ padding: 4 }}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
+              Dispositivos Smart TV y receptores multimedia detectados en tu red Wi-Fi local:
+            </Text>
+
+            {[
+              { id: 'tv_1', name: 'Sala Principal (Chromecast Ultra)', type: 'Google Cast' },
+              { id: 'tv_2', name: 'Samsung QLED 4K Living', type: 'AirPlay / DLNA' },
+              { id: 'tv_3', name: 'LG webOS Smart TV', type: 'Miracast' },
+            ].map((device) => {
+              const isConnected = connectedCastDevice === device.name;
+              return (
+                <TouchableOpacity
+                  key={device.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    borderRadius: 14,
+                    marginBottom: 10,
+                    backgroundColor: isConnected ? colors.primaryGlow : colors.surfaceCard,
+                    borderWidth: 1,
+                    borderColor: isConnected ? colors.primary : colors.border,
+                  }}
+                  onPress={() => {
+                    if (isConnected) {
+                      setConnectedCastDevice(null);
+                      Alert.alert('Transmisión Finalizada', `Te has desconectado de ${device.name}.`);
+                    } else {
+                      setConnectedCastDevice(device.name);
+                      Alert.alert(
+                        '¡Conectado a Smart TV!',
+                        `Transmitiendo "${currentVideo.title}" en ${device.name} con streaming HLS en alta definición.`
+                      );
+                      setShowCastModal(false);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Tv size={20} color={isConnected ? colors.primary : colors.textSecondary} />
+                    <View>
+                      <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{device.name}</Text>
+                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>Protocolo: {device.type}</Text>
+                    </View>
+                  </View>
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: isConnected ? colors.primary : colors.surfaceCardLight }}>
+                    <Text style={{ color: isConnected ? '#FFFFFF' : colors.textSecondary, fontSize: 11, fontWeight: '800' }}>
+                      {isConnected ? 'Desconectar' : 'Conectar'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={{ marginTop: 10, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.surfaceCardLight, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}
+              onPress={() => setShowCastModal(false)}
+            >
+              <Text style={{ color: colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Cerrar</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };

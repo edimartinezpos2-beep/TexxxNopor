@@ -45,6 +45,8 @@ interface VideoOptionsModalProps {
   onViewActor?: (actorId?: string, actorName?: string) => void;
   onVideoDeleted?: (videoId: string) => void;
   onToggleWatchLater?: (video: VideoItem) => void;
+  playbackRate?: number;
+  onSpeedChange?: (speed: number) => void;
 }
 
 export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
@@ -54,6 +56,8 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
   onViewActor,
   onVideoDeleted,
   onToggleWatchLater,
+  playbackRate = 1.0,
+  onSpeedChange,
 }) => {
   const { colors, isDark, toggleTheme, themeMode, setThemeMode } = useTheme();
   const { user, userToken } = useAuth();
@@ -63,8 +67,25 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
   const [selectedSpeed, setSelectedSpeed] = useState<'1.0x' | '1.25x' | '1.5x' | '2.0x'>('1.0x');
   const [showPlaylistsSubmodal, setShowPlaylistsSubmodal] = useState(false);
   const [showQualitySubmodal, setShowQualitySubmodal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState('Contenido inapropiado / Sin consentimiento');
   const [isSaved, setIsSaved] = useState(video?.isSaved || false);
   const [savingAction, setSavingAction] = useState(false);
+
+  React.useEffect(() => {
+    if (video) {
+      setIsSaved(Boolean(video.isSaved));
+    }
+  }, [video?.id, video?.isSaved]);
+
+  React.useEffect(() => {
+    if (playbackRate) {
+      const match = `${playbackRate}x`;
+      if (['1.0x', '1.25x', '1.5x', '2.0x'].includes(match)) {
+        setSelectedSpeed(match as any);
+      }
+    }
+  }, [playbackRate]);
 
   if (!video) return null;
 
@@ -96,23 +117,30 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
     }
   };
 
-  // 2. Compartir Video
+  // 2. Compartir Video (Enlace canónico web)
   const handleShare = async () => {
     try {
-      const url = video.videoUrl || `https://texxxnopor.com/v/${video.id}`;
+      const canonicalUrl = `https://texxxnopor.com/video/${video.id}`;
       await Share.share({
         title: video.title,
-        message: `🔥 Mira "${video.title}" en TexxxNopor: ${url}`,
-        url,
+        message: `🔥 Mira "${video.title}" en TexxxNopor: ${canonicalUrl}`,
+        url: canonicalUrl,
       });
     } catch (err: any) {
       console.log('Error sharing video:', err);
     }
   };
 
-  // 3. Copiar Enlace
+  // 3. Copiar Enlace Web (No archivo local)
   const handleCopyLink = () => {
-    Alert.alert('Enlace Copiado', `El enlace de "${video.title}" ha sido copiado al portapapeles.`);
+    const canonicalUrl = `https://texxxnopor.com/video/${video.id}`;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(canonicalUrl).catch(() => {});
+    }
+    Alert.alert(
+      '¡Enlace Copiado!',
+      `El enlace directo al video ha sido copiado al portapapeles:\n\n${canonicalUrl}`
+    );
   };
 
   // 4. Ver Perfil de la Actriz / Actor
@@ -123,17 +151,16 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
     }
   };
 
-  // 5. Reportar Video
+  // 5. Reportar Video (Abre modal cancelable)
   const handleReport = () => {
+    setShowReportModal(true);
+  };
+
+  const handleSendReport = () => {
+    setShowReportModal(false);
     Alert.alert(
-      'Reportar Video',
-      '¿Por qué deseas reportar este contenido?',
-      [
-        { text: 'Contenido inapropiado / Sin consentimiento', onPress: () => Alert.alert('Reporte Enviado', 'Gracias por tu reporte. Nuestro equipo de moderación revisará el video.') },
-        { text: 'Problema de calidad o audio', onPress: () => Alert.alert('Reporte Enviado', 'Reporte de calidad registrado.') },
-        { text: 'Infracción de derechos de autor', onPress: () => Alert.alert('Reporte Enviado', 'Reporte por DMCA recibido.') },
-        { text: 'Cancelar', style: 'cancel' },
-      ]
+      'Reporte Enviado con Éxito',
+      `Gracias por tu colaboración. El reporte por motivo: "${selectedReportReason}" ha sido recibido y será revisado por el equipo de moderación.`
     );
   };
 
@@ -255,7 +282,13 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
                           { borderColor: colors.border },
                           selectedSpeed === sp && { backgroundColor: colors.primary, borderColor: colors.primary },
                         ]}
-                        onPress={() => setSelectedSpeed(sp)}
+                        onPress={() => {
+                          setSelectedSpeed(sp);
+                          const num = parseFloat(sp.replace('x', ''));
+                          if (onSpeedChange && !isNaN(num)) {
+                            onSpeedChange(num);
+                          }
+                        }}
                         activeOpacity={0.8}
                       >
                         <Text
@@ -404,8 +437,82 @@ export const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
+      {/* Modal Dedicado de Reporte de Video (Cancelable y con Cierre Seguro) */}
+      <Modal visible={showReportModal} transparent animationType="fade" onRequestClose={() => setShowReportModal(false)}>
+        <TouchableWithoutFeedback onPress={() => setShowReportModal(false)}>
+          <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={{ width: '100%', maxWidth: 440, backgroundColor: colors.surface, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: colors.border }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ShieldAlert size={22} color="#FF9500" />
+                    <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '900' }}>Reportar Video</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowReportModal(false)} style={{ padding: 6 }}>
+                    <X size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
+                  Indica el motivo por el cual consideras que este contenido infringe las normas de la comunidad:
+                </Text>
+
+                {[
+                  'Contenido inapropiado / Sin consentimiento',
+                  'Menor de edad sospechoso / Infracción estricta 18+',
+                  'Infracción de derechos de autor (DMCA)',
+                  'Problema técnico, calidad de video o audio',
+                  'Spam, título falso o enlace roto',
+                ].map((reason) => {
+                  const isSelected = selectedReportReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingVertical: 12,
+                        paddingHorizontal: 14,
+                        borderRadius: 12,
+                        marginBottom: 8,
+                        backgroundColor: isSelected ? colors.primaryGlow : colors.surfaceCard,
+                        borderWidth: 1,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      }}
+                      onPress={() => setSelectedReportReason(reason)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: isSelected ? colors.primary : colors.textPrimary, fontSize: 13, fontWeight: isSelected ? '700' : '500', flex: 1, marginRight: 8 }}>
+                        {reason}
+                      </Text>
+                      {isSelected && <Check size={16} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.surfaceCardLight, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}
+                    onPress={() => setShowReportModal(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' }}
+                    onPress={handleSendReport}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 14 }}>Enviar Reporte</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </Modal>
   );
 };

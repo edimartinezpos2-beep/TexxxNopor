@@ -600,13 +600,27 @@ app.get('/api/auth/bootstrap-status', async (req: Request, res: Response) => {
 });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
-  const { email, username, password, age, isOver18 } = req.body;
+  const { email, username, password, age, birthDate, isOver18 } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email y contraseña son requeridos' });
   }
 
-  const parsedAge = Number(age);
+  let parsedAge = Number(age);
+  let parsedBirthDate: Date | null = null;
+  if (birthDate) {
+    parsedBirthDate = new Date(birthDate);
+    if (!isNaN(parsedBirthDate.getTime())) {
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - parsedBirthDate.getFullYear();
+      const m = today.getMonth() - parsedBirthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < parsedBirthDate.getDate())) {
+        calculatedAge--;
+      }
+      parsedAge = calculatedAge;
+    }
+  }
+
   if (!parsedAge || parsedAge < 18 || isOver18 === false) {
     return res.status(400).json({
       error: 'Acceso restringido: Debes tener 18 años o más para registrarte en TexxxNopor.',
@@ -643,6 +657,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         passwordHash: hashedPassword,
         role: assignedRole,
         age: parsedAge,
+        birthDate: parsedBirthDate,
         authProvider: 'LOCAL',
         avatarUrl: null,
         isVerified: assignedRole === 'ADMIN',
@@ -663,6 +678,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         username: newUser.username,
         role: newUser.role,
         age: newUser.age,
+        birthDate: newUser.birthDate ? newUser.birthDate.toISOString().split('T')[0] : null,
         authProvider: newUser.authProvider,
         avatarUrl: newUser.avatarUrl,
         isVerified: newUser.isVerified,
@@ -1590,6 +1606,146 @@ app.get('/api/user/playlists', authenticateJWT, async (req: Request, res: Respon
   }
 });
 
+// Crear lista de reproducción personalizada para el usuario autenticado
+app.post('/api/user/playlists', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { title, description, isPrivate, coverUrl } = req.body;
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'El nombre de la lista de reproducción es requerido.' });
+    }
+    const newPlaylist = await prisma.playlist.create({
+      data: {
+        title: title.trim(),
+        description: description?.trim() || null,
+        isPrivate: Boolean(isPrivate),
+        coverUrl: coverUrl || null,
+        userId,
+      },
+    });
+    return res.status(201).json({
+      status: 'success',
+      playlist: {
+        id: newPlaylist.id,
+        title: newPlaylist.title,
+        description: newPlaylist.description || '',
+        coverUrl:
+          newPlaylist.coverUrl ||
+          'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=600&auto=format&fit=crop',
+        isPrivate: newPlaylist.isPrivate,
+        itemsCount: 0,
+        videos: [],
+        createdAt: newPlaylist.createdAt.toISOString(),
+      },
+    });
+  } catch (err: any) {
+    console.error('Error creating user playlist:', err);
+    return res.status(500).json({ error: 'Error al crear la lista de reproducción en la base de datos.' });
+  }
+});
+
+// Eliminar lista de reproducción del usuario autenticado
+app.delete('/api/user/playlists/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { id } = req.params;
+    const playlist = await prisma.playlist.findFirst({
+      where: { id, userId },
+    });
+    if (!playlist) {
+      return res.status(404).json({ error: 'Lista no encontrada o no tienes permisos para eliminarla.' });
+    }
+    await prisma.playlistItem.deleteMany({ where: { playlistId: id } });
+    await prisma.playlist.delete({ where: { id } });
+    return res.json({ status: 'success', message: 'Lista eliminada correctamente.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al eliminar la lista de reproducción.' });
+  }
+});
+
+// Agregar video a una lista de reproducción del usuario
+app.post('/api/user/playlists/:id/videos', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { id } = req.params;
+    const { videoId } = req.body;
+    if (!videoId) {
+      return res.status(400).json({ error: 'Se requiere el ID del video a agregar.' });
+    }
+    const playlist = await prisma.playlist.findFirst({
+      where: { id, userId },
+    });
+    if (!playlist) {
+      return res.status(404).json({ error: 'Lista no encontrada o no tienes permisos.' });
+    }
+    const existing = await prisma.playlistItem.findFirst({
+      where: { playlistId: id, videoId },
+    });
+    if (existing) {
+      return res.json({ status: 'success', message: 'El video ya se encuentra en esta lista.' });
+    }
+    const count = await prisma.playlistItem.count({ where: { playlistId: id } });
+    await prisma.playlistItem.create({
+      data: {
+        playlistId: id,
+        videoId,
+        order: count + 1,
+      },
+    });
+    return res.json({ status: 'success', message: 'Video añadido a la lista correctamente.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al añadir el video a la lista.' });
+  }
+});
+
+// Solicitud de baja y eliminación permanente de cuenta y datos por parte del usuario (+18)
+app.delete('/api/user/account', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const userToDelete = await prisma.user.findUnique({ where: { id: userId } });
+    if (!userToDelete) {
+      return res.status(404).json({ error: 'Usuario no encontrado en la base de datos.' });
+    }
+
+    if (userToDelete.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          error: 'Por seguridad del sistema, no es posible eliminar la única cuenta con rol Administrador principal.',
+        });
+      }
+    }
+
+    // 1. Eliminar todos los comentarios escritos por el usuario en cualquier video
+    await prisma.comment.deleteMany({ where: { userId } });
+
+    // 2. Eliminar interacciones (Likes, Favoritos, Historial, Reacciones, Seguimiento)
+    await prisma.videoLike.deleteMany({ where: { userId } });
+    await prisma.favorite.deleteMany({ where: { userId } });
+    await prisma.playbackHistory.deleteMany({ where: { userId } });
+    await prisma.videoReaction.deleteMany({ where: { userId } });
+    await prisma.follow.deleteMany({ where: { followerId: userId } });
+
+    // 3. Eliminar listas de reproducción creadas por el usuario
+    await prisma.playlistItem.deleteMany({ where: { playlist: { userId } } });
+    await prisma.playlist.deleteMany({ where: { userId } });
+
+    // 4. Si tiene perfil de creador
+    await prisma.creatorProfile.deleteMany({ where: { userId } });
+
+    // 5. Eliminar registro del usuario definitivamente (libera email y username para futuros registros)
+    await prisma.user.delete({ where: { id: userId } });
+
+    return res.json({
+      status: 'success',
+      message: 'Cuenta dada de baja exitosamente. Todos tus comentarios, listas y datos han sido eliminados de la plataforma.',
+    });
+  } catch (err: any) {
+    console.error('Error in delete user account:', err);
+    return res.status(500).json({ error: 'Error al procesar la baja de la cuenta en la base de datos.' });
+  }
+});
+
 // Suscribirse a Plan Premium (Pasarela Bancaria Externa y Registro en DB - Pesos Colombianos COP)
 app.post('/api/user/subscribe-premium', authenticateJWT, async (req: Request, res: Response) => {
   try {
@@ -1615,7 +1771,7 @@ app.post('/api/user/subscribe-premium', authenticateJWT, async (req: Request, re
 
     const txId = `TX-COP-${Math.floor(10000000 + Math.random() * 90000000)}`;
     const authCode = `AUT-COL-${Math.floor(100000 + Math.random() * 900000)}`;
-    const planAmount = amount || 10000;
+    const planAmount = amount || 15000;
     const txCurrency = currency || 'COP';
 
     return res.json({
@@ -1857,7 +2013,7 @@ app.get('/api/admin/analytics', authenticateJWT, requireRole(UserRole.ADMIN), as
     });
 
     // Cálculo de ingresos aproximados en COP
-    const revenueVIP = premiumUsersCount * 10000;
+    const revenueVIP = premiumUsersCount * 15000;
     const revenueActors = creatorsCount * 5000;
     const totalRevenue = revenueVIP + revenueActors;
 
@@ -1942,7 +2098,7 @@ app.post('/api/wompi/create-transaction', authenticateJWT, async (req: Request, 
       customerName,
     } = req.body;
 
-    const planAmount = amount || 10000;
+    const planAmount = amount || 15000;
     const amountInCents = Math.round(planAmount * 100);
     const reference = `TX-${user.id.slice(0, 8)}-${Date.now()}`;
 
@@ -3425,12 +3581,22 @@ app.get('/api/videos', async (req: Request, res: Response) => {
       categoryFilter !== 'Para ti' &&
       categoryFilter !== 'Todos'
     ) {
-      const catSlug = categoryFilter.trim().toLowerCase().replace(/\s+/g, '-');
-      whereClause.OR = [
-        { category: { name: { equals: categoryFilter.trim(), mode: 'insensitive' } } },
-        { category: { slug: { equals: catSlug, mode: 'insensitive' } } },
-        { tagsList: { has: `#${catSlug}` } },
-      ];
+      if (categoryFilter.trim().toLowerCase() === 'nuevos') {
+        const recentThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        whereClause.OR = [
+          { createdAt: { gte: recentThreshold } },
+          { tagsList: { has: '#nuevos' } },
+          { tagsList: { has: '#nuevo' } },
+          { category: { name: { contains: 'nuevo', mode: 'insensitive' } } },
+        ];
+      } else {
+        const catSlug = categoryFilter.trim().toLowerCase().replace(/\s+/g, '-');
+        whereClause.OR = [
+          { category: { name: { equals: categoryFilter.trim(), mode: 'insensitive' } } },
+          { category: { slug: { equals: catSlug, mode: 'insensitive' } } },
+          { tagsList: { has: `#${catSlug}` } },
+        ];
+      }
     }
 
     // Filtrar por Tag o Hashtag específico
@@ -3438,7 +3604,17 @@ app.get('/api/videos', async (req: Request, res: Response) => {
       const cleanTag = tagFilter.trim().startsWith('#')
         ? tagFilter.trim().toLowerCase()
         : `#${tagFilter.trim().toLowerCase()}`;
-      whereClause.tagsList = { has: cleanTag };
+      if (cleanTag === '#nuevos' || cleanTag === '#nuevo') {
+        const recentThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        whereClause.OR = [
+          { createdAt: { gte: recentThreshold } },
+          { tagsList: { has: '#nuevos' } },
+          { tagsList: { has: '#nuevo' } },
+          { category: { name: { contains: 'nuevo', mode: 'insensitive' } } },
+        ];
+      } else {
+        whereClause.tagsList = { has: cleanTag };
+      }
     }
 
     // Búsqueda general por texto (título, descripción, tags o actor)

@@ -1,4 +1,5 @@
 // Servicio de Almacenamiento y Descargas Offline para TexxxNopor
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoItem } from './api';
 
 export interface DownloadedVideoItem extends VideoItem {
@@ -7,34 +8,43 @@ export interface DownloadedVideoItem extends VideoItem {
   isOfflineAvailable: boolean;
 }
 
-// Almacén en memoria persistente durante la sesión
-let offlineDownloadsStore: DownloadedVideoItem[] = [
-  {
-    id: 'v_demo_offline_1',
-    title: 'Sesión Exclusiva 4K Ultra HD',
-    description: 'Video descargado para reproducción sin conexión / modo avión.',
-    creatorName: 'Alexis Texas',
-    creatorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-    duration: '22:15',
-    views: '12.4k vistas',
-    likesCount: 1420,
-    thumbnailUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop',
-    videoUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-    hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-    category: 'Para ti',
-    tags: ['#parati', '#4k', '#offline'],
-    downloadedAt: new Date().toLocaleDateString('es-CO'),
-    fileSizeFormatted: '48.5 MB',
-    isOfflineAvailable: true,
-    isNew: false,
-  },
-];
+const STORAGE_KEY = '@texxxnopor_offline_downloads';
+
+// Almacén en memoria persistente
+let offlineDownloadsStore: DownloadedVideoItem[] = [];
+let isInitialized = false;
+
+const initStore = async () => {
+  if (isInitialized) return;
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        offlineDownloadsStore = parsed;
+      }
+    }
+  } catch (err) {
+    console.log('[OfflineStorage] Error loading persisted downloads:', err);
+  } finally {
+    isInitialized = true;
+  }
+};
+
+const persistStore = async () => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(offlineDownloadsStore));
+  } catch (err) {
+    console.log('[OfflineStorage] Error persisting downloads:', err);
+  }
+};
 
 export const offlineStorage = {
   /**
    * Obtener todos los videos descargados
    */
   async getDownloads(): Promise<DownloadedVideoItem[]> {
+    await initStore();
     return [...offlineDownloadsStore];
   },
 
@@ -42,6 +52,7 @@ export const offlineStorage = {
    * Verificar si un video ya está descargado
    */
   async isDownloaded(videoId: string): Promise<boolean> {
+    await initStore();
     return offlineDownloadsStore.some((v) => v.id === videoId);
   },
 
@@ -52,6 +63,7 @@ export const offlineStorage = {
     video: VideoItem,
     onProgress?: (progress: number) => void
   ): Promise<DownloadedVideoItem> {
+    await initStore();
     // Si ya existe, retornar
     const existing = offlineDownloadsStore.find((v) => v.id === video.id);
     if (existing) return existing;
@@ -71,6 +83,7 @@ export const offlineStorage = {
     };
 
     offlineDownloadsStore.unshift(downloadedItem);
+    await persistStore();
     return downloadedItem;
   },
 
@@ -78,7 +91,9 @@ export const offlineStorage = {
    * Eliminar video de las descargas
    */
   async removeDownload(videoId: string): Promise<boolean> {
+    await initStore();
     offlineDownloadsStore = offlineDownloadsStore.filter((v) => v.id !== videoId);
+    await persistStore();
     return true;
   },
 
@@ -87,6 +102,7 @@ export const offlineStorage = {
    */
   async clearAllDownloads(): Promise<boolean> {
     offlineDownloadsStore = [];
+    await persistStore();
     return true;
   },
 };

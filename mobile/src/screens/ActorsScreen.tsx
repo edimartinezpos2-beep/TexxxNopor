@@ -62,9 +62,15 @@ interface ActorFullProfile extends ActorItem {
 
 interface ActorsScreenProps {
   onSelectVideo?: (video: VideoItem) => void;
+  selectedActorId?: string | null;
+  onClearSelectedActor?: () => void;
 }
 
-export const ActorsScreen: React.FC<ActorsScreenProps> = ({ onSelectVideo }) => {
+export const ActorsScreen: React.FC<ActorsScreenProps> = ({
+  onSelectVideo,
+  selectedActorId,
+  onClearSelectedActor,
+}) => {
   const { colors, isDark } = useTheme();
   const { userToken, user } = useAuth();
   const [actorsList, setActorsList] = useState<ActorItem[]>([]);
@@ -131,6 +137,34 @@ export const ActorsScreen: React.FC<ActorsScreenProps> = ({ onSelectVideo }) => 
   useEffect(() => {
     fetchActors(1);
   }, [fetchActors]);
+
+  useEffect(() => {
+    if (selectedActorId) {
+      let isMounted = true;
+      const openById = async () => {
+        setLoadingActorDetails(true);
+        setActiveTab('videos');
+        scrollY.setValue(0);
+        try {
+          const full = await api.actors.getActorFullProfile(selectedActorId, user?.id);
+          if (isMounted && full) {
+            setSelectedActor(full as ActorFullProfile);
+          }
+        } catch (e) {
+          console.log('Error opening actor profile by ID:', e);
+        } finally {
+          if (isMounted) {
+            setLoadingActorDetails(false);
+            onClearSelectedActor?.();
+          }
+        }
+      };
+      openById();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [selectedActorId, user?.id, onClearSelectedActor]);
 
   const onRefresh = () => {
     setRefreshing(true);

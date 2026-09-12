@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Plus, CheckCircle2, Sparkles, X, Camera, Image as ImageIcon } from 'lucide-react-native';
+import { Plus, CheckCircle2, Sparkles, X, Camera, Image as ImageIcon, User } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ActorStoryGroup, api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -107,14 +107,16 @@ export const StoriesCarousel: React.FC<StoriesCarouselProps> = ({
             activeOpacity={0.85}
           >
             <View style={styles.myStoryAvatarWrap}>
-              <Image
-                source={{
-                  uri:
-                    user?.avatarUrl ||
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-                }}
-                style={styles.avatarImage}
-              />
+              {user?.avatarUrl ? (
+                <Image
+                  source={{ uri: user.avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <View style={[styles.avatarImage, { backgroundColor: '#262626', justifyContent: 'center', alignItems: 'center' }]}>
+                  <User size={22} color="#888888" />
+                </View>
+              )}
               <View style={styles.plusBadge}>
                 <Plus size={14} color="#FFFFFF" strokeWidth={3} />
               </View>

@@ -133,11 +133,12 @@ export const api = {
       password: string,
       age: number,
       isOver18: boolean,
-      requestedRole: UserRole = 'CONSUMER'
+      requestedRole: UserRole = 'CONSUMER',
+      birthDate?: string
     ): Promise<{ token: string; user: UserProfile; message?: string }> {
       const res = await apiFetch<{ token: string; user: UserProfile; message?: string }>('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, username, password, age, isOver18, requestedRole }),
+        body: JSON.stringify({ email, username, password, age, birthDate, isOver18, requestedRole }),
         throwOnError: true,
       });
 
@@ -301,6 +302,45 @@ export const api = {
       });
       if (res && Array.isArray(res.playlists)) return res.playlists;
       return [];
+    },
+
+    async createPlaylist(
+      token: string,
+      data: { title: string; description?: string; isPrivate?: boolean; coverUrl?: string }
+    ): Promise<{ status: string; playlist: any } | null> {
+      return await apiFetch<{ status: string; playlist: any }>('/api/user/playlists', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+        throwOnError: true,
+      });
+    },
+
+    async deletePlaylist(token: string, playlistId: string): Promise<boolean> {
+      const res = await apiFetch<{ status: string }>(`/api/user/playlists/${playlistId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        throwOnError: true,
+      });
+      return !!res;
+    },
+
+    async addVideoToPlaylist(token: string, playlistId: string, videoId: string): Promise<boolean> {
+      const res = await apiFetch<{ status: string }>(`/api/user/playlists/${playlistId}/videos`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ videoId }),
+        throwOnError: true,
+      });
+      return !!res;
+    },
+
+    async deleteAccount(token: string): Promise<{ status: string; message: string } | null> {
+      return await apiFetch<{ status: string; message: string }>('/api/user/account', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        throwOnError: true,
+      });
     },
 
     async subscribePremium(

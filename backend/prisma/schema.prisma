@@ -39,6 +39,7 @@ model User {
   username      String         @unique
   role          Role           @default(CONSUMER)
   age           Int?
+  birthDate     DateTime?
   authProvider  String?        @default("LOCAL") // LOCAL, GOOGLE, FACEBOOK
   isVerified    Boolean        @default(false)
   isVip         Boolean        @default(false)

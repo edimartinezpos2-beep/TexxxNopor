@@ -42,6 +42,8 @@ export interface HLSVideoPlayerProps {
   title?: string;
   onBack?: () => void;
   autoPlay?: boolean;
+  rate?: number;
+  onRateChange?: (rate: number) => void;
 }
 
 export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
@@ -51,6 +53,8 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   title = 'Video TexxxNopor',
   onBack,
   autoPlay = true,
+  rate = 1.0,
+  onRateChange,
 }) => {
   const videoRef = useRef<Video>(null);
   const containerRef = useRef<View>(null);
@@ -249,63 +253,71 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
     resetHideControlsTimer();
   };
 
+  const isTogglingRef = useRef(false);
+
+  useEffect(() => {
+    if (rate && rate !== playbackRate && videoRef.current) {
+      changeRate(rate);
+    }
+  }, [rate]);
+
   // Alternar Pantalla Completa (Web y Nativo Android/iOS)
   const toggleFullscreen = async () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      try {
-        if (!document.fullscreenElement) {
-          const elem =
-            document.getElementById('texxx-fullscreen-container') ||
-            document.querySelector('video') ||
-            document.documentElement;
-          if (elem?.requestFullscreen) {
-            await elem.requestFullscreen();
-          } else if ((elem as any)?.webkitRequestFullscreen) {
-            await (elem as any).webkitRequestFullscreen();
-          }
-          setIsFullscreen(true);
-        } else {
-          if (document.exitFullscreen) {
-            await document.exitFullscreen();
-          } else if ((document as any)?.webkitExitFullscreen) {
-            await (document as any).webkitExitFullscreen();
-          }
-          setIsFullscreen(false);
-        }
-      } catch (err) {
-        console.log('Error toggling web fullscreen:', err);
-      }
-      return;
-    }
+    if (isTogglingRef.current) return;
+    isTogglingRef.current = true;
 
-    // Nativo Mobile
-    if (isFullscreen) {
-      try {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      } catch (_) {}
-      setIsFullscreen(false);
-      if (videoRef.current) {
+    try {
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
         try {
-          await videoRef.current.dismissFullscreenPlayer();
+          if (!document.fullscreenElement) {
+            const elem =
+              document.getElementById('texxx-fullscreen-container') ||
+              document.querySelector('video') ||
+              document.documentElement;
+            if (elem?.requestFullscreen) {
+              await elem.requestFullscreen();
+            } else if ((elem as any)?.webkitRequestFullscreen) {
+              await (elem as any).webkitRequestFullscreen();
+            }
+            setIsFullscreen(true);
+          } else {
+            if (document.exitFullscreen) {
+              await document.exitFullscreen();
+            } else if ((document as any)?.webkitExitFullscreen) {
+              await (document as any).webkitExitFullscreen();
+            }
+            setIsFullscreen(false);
+          }
+        } catch (err) {
+          console.log('Error toggling web fullscreen:', err);
+        }
+        return;
+      }
+
+      // Nativo Mobile: alternancia in-app fluida sin conflictos con activity externa
+      if (isFullscreen) {
+        setIsFullscreen(false);
+        try {
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        } catch (_) {}
+      } else {
+        setIsFullscreen(true);
+        try {
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT);
         } catch (_) {}
       }
-    } else {
-      try {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT);
-      } catch (_) {}
-      setIsFullscreen(true);
-      if (videoRef.current) {
-        try {
-          await videoRef.current.presentFullscreenPlayer();
-        } catch (_) {}
-      }
+    } finally {
+      setTimeout(() => {
+        isTogglingRef.current = false;
+      }, 350);
     }
   };
 
-  const changeRate = async (rate: number) => {
+  const changeRate = async (newRate: number) => {
     if (!videoRef.current) return;
-    setPlaybackRate(rate);
-    await videoRef.current.setRateAsync(rate, true);
+    setPlaybackRate(newRate);
+    await videoRef.current.setRateAsync(newRate, true);
+    if (onRateChange) onRateChange(newRate);
     setShowSettingsModal(false);
   };
 

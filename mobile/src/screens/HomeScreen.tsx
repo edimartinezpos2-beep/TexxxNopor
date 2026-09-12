@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import {
   Search,
-  ShieldCheck,
   CheckCircle2,
   Play,
   Eye,
@@ -27,11 +26,13 @@ import {
   User,
   Users,
   X,
-  Hash,
   Bell,
+  ThumbsUp,
+  Award,
+  Film,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
-import { api, VideoItem, ActorStoryGroup } from '../services/api';
+import { api, VideoItem, ActorStoryGroup, ActorItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { AuthScreen } from '../navigation/AuthStack';
 import { AccountMenuModal } from '../components/AccountMenuModal';
@@ -39,6 +40,17 @@ import { BrandLogo } from '../components/BrandLogo';
 import { VideoOptionsModal } from '../components/VideoOptionsModal';
 import { NotificationsModal } from '../components/NotificationsModal';
 import { StoriesCarousel } from '../components/StoriesCarousel';
+
+// Nuevas Secciones de Alto Nivel
+import { OrientationSwitcher, OrientationType } from '../components/OrientationSwitcher';
+import { SpotlightHeroCard } from '../components/SpotlightHeroCard';
+import { TexxxClipsSection } from '../components/TexxxClipsSection';
+import { TopPornstarsSection } from '../components/TopPornstarsSection';
+import { TrendingRankingsSection } from '../components/TrendingRankingsSection';
+import { VisualCategoriesGrid } from '../components/VisualCategoriesGrid';
+import { LiveCamsTeaser } from '../components/LiveCamsTeaser';
+import { AdBannerCard } from '../components/AdBannerCard';
+import { GamesTeaserBanner } from '../components/GamesTeaserBanner';
 
 interface HomeScreenProps {
   onSelectVideo?: (video: VideoItem) => void;
@@ -57,11 +69,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [unreadNotifsCount, setUnreadNotifsCount] = useState(0);
+
+  // Estados de navegación y contenido
+  const [orientation, setOrientation] = useState<OrientationType>('straight');
   const [selectedCategory, setSelectedCategory] = useState('Para ti');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [videoList, setVideoList] = useState<VideoItem[]>([]);
   const [storyGroups, setStoryGroups] = useState<ActorStoryGroup[]>([]);
+  const [actorsList, setActorsList] = useState<ActorItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -72,7 +88,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoItem | null>(null);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
 
-  // Categorías de posicionamiento exactas solicitadas
+  // Categorías de posicionamiento exactas
   const categories = [
     { id: '1', name: 'Para ti', icon: Flame },
     { id: '2', name: 'Nuevos', icon: Sparkles },
@@ -104,6 +120,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   }, [user?.id]);
 
+  const fetchActors = useCallback(async () => {
+    try {
+      const list = await api.actors.getActors(user?.id);
+      if (list && list.length > 0) {
+        setActorsList(list);
+      }
+    } catch (err) {
+      console.log('Error fetching actors:', err);
+    }
+  }, [user?.id]);
+
   const fetchVideos = useCallback(async (pageNum: number = 1) => {
     try {
       const data = await api.videos.getFeed(userToken, undefined, { page: pageNum, limit: 12 });
@@ -129,12 +156,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   useEffect(() => {
     fetchStories();
+    fetchActors();
     fetchVideos(1);
-  }, [fetchStories, fetchVideos]);
+  }, [fetchStories, fetchActors, fetchVideos]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchStories();
+    fetchActors();
     fetchVideos(1);
   };
 
@@ -146,7 +175,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   const handleToggleLike = async (item: VideoItem) => {
-    if (!userToken) return;
+    if (!userToken) {
+      setShowAuthModal(true);
+      return;
+    }
     const res = await api.videos.toggleLike(userToken, item.id);
     setVideoList((prev) =>
       prev.map((v) =>
@@ -155,9 +187,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     );
   };
 
-  // Filtrado reactivo por Categoría y Hashtags/Búsqueda
+  const handleToggleFollowActor = async (actor: ActorItem) => {
+    if (!userToken) {
+      setShowAuthModal(true);
+      return;
+    }
+    try {
+      const res = await api.actors.toggleFollow(actor.id, userToken);
+      setActorsList((prev) =>
+        prev.map((a) => (a.id === actor.id ? { ...a, isFollowing: res.isFollowing } : a))
+      );
+    } catch (err) {
+      console.log('Error following actor:', err);
+    }
+  };
+
+  // Filtrado reactivo por Orientación, Categoría y Búsqueda
   const filteredVideos = videoList.filter((v) => {
-    // 1. Filtro de Categoría
+    // 1. Filtro por Orientación si es VR, Gay o Trans
+    if (orientation === 'vr') {
+      const isVr = (v.tags && v.tags.some(t => t.toLowerCase().includes('vr'))) || v.title.toLowerCase().includes('vr');
+      if (!isVr) return false;
+    } else if (orientation === 'gay') {
+      const isGay = (v.tags && v.tags.some(t => t.toLowerCase().includes('gay'))) || (v.category || '').toLowerCase().includes('gay');
+      if (!isGay && v.category === 'Gay') return false;
+    } else if (orientation === 'trans') {
+      const isTrans = (v.tags && v.tags.some(t => t.toLowerCase().includes('trans'))) || (v.category || '').toLowerCase().includes('trans');
+      if (!isTrans && v.category === 'Trans') return false;
+    }
+
+    // 2. Filtro de Categoría
     let matchesCategory = true;
     if (selectedCategory !== 'Para ti') {
       const catNorm = selectedCategory.toLowerCase();
@@ -185,7 +244,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       }
     }
 
-    // 2. Filtro de Búsqueda y Hashtags
+    // 3. Filtro de Búsqueda
     let matchesSearch = true;
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -206,147 +265,185 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       ? [...filteredVideos].sort((a, b) => (b.viewsCount || 0) - (a.viewsCount || 0))
       : filteredVideos;
 
-  const renderVideoItem = ({ item }: { item: VideoItem }) => (
-    <TouchableOpacity
-      style={[
-        styles.videoCard,
-        { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-      ]}
-      activeOpacity={0.9}
-      onPress={() => onSelectVideo && onSelectVideo(item)}
-    >
-      {/* Thumbnail */}
-      <View style={[styles.thumbnailWrapper, { backgroundColor: colors.surfaceCardLight }]}>
-        <Image
-          source={{
-            uri:
-              item.thumbnailUrl ||
-              'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
-          }}
-          style={styles.thumbnail as any}
-          resizeMode="cover"
-        />
+  // Video destacado para Spotlight Hero
+  const featuredVideo = displayedVideos.length > 0 ? displayedVideos[0] : null;
 
-        {/* Badges superiores (18+ & VERIFICADO) */}
-        <View style={styles.thumbnailTopBadges}>
-          <View style={styles.agePill}>
-            <Text style={styles.agePillText}>18+</Text>
-          </View>
-          <View style={styles.verifiedPill}>
-            <Text style={styles.verifiedPillText}>VERIFICADO</Text>
-          </View>
-        </View>
+  const renderVideoItem = ({ item, index }: { item: VideoItem; index: number }) => {
+    // Calculamos un porcentaje simulado de likes basado en las métricas
+    const satisfactionPercent = Math.min(99, Math.max(88, 90 + ((index * 3) % 10)));
 
-        {/* Botón Central de Play */}
-        <View style={styles.centerPlayButton}>
-          <Play size={24} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 3 }} />
-        </View>
-
-        {/* Duración */}
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{item.duration}</Text>
-        </View>
-      </View>
-
-      {/* Metadatos del Video */}
-      <View style={styles.videoInfoRow}>
-        <TouchableOpacity
-          style={styles.creatorAvatarWrapper}
-          onPress={() => onViewActor && onViewActor(item.actorId, item.actorName)}
-          activeOpacity={0.8}
-        >
-          <Image
-            source={{
-              uri:
-                item.actorAvatar ||
-                item.creatorAvatar ||
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-            }}
-            style={styles.creatorAvatar as any}
+    return (
+      <View key={item.id}>
+        {/* Cada 6 videos, insertamos un banner publicitario nativo de TrafficJunky */}
+        {index > 0 && index % 6 === 0 && (
+          <AdBannerCard
+            title="Citas para Adultos Verificadas en tu Ciudad"
+            subtitle="Conoce solteras y solteros dispuestos a todo esta noche. Registro 100% privado."
+            ctaText="Ver Fotos Gratis"
+            imageUrl="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop"
+            sponsorName="TrafficJunky Ads"
           />
-          <View style={styles.creatorAvatarCheck}>
-            <CheckCircle2 size={10} color="#000000" fill={colors.verifiedBlue} />
-          </View>
-        </TouchableOpacity>
+        )}
 
-        <View style={styles.titleContainer}>
-          <Text style={[styles.videoTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <View style={styles.creatorNameRow}>
-            <Text style={[styles.creatorName, { color: colors.textSecondary }]}>
-              {item.actorName || item.creatorName || 'Actor Principal'}
-            </Text>
-            <CheckCircle2 size={12} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
-            <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold', marginLeft: 4 }}>
-              • {item.category || 'Para ti'}
-            </Text>
+        <TouchableOpacity
+          style={[
+            styles.videoCard,
+            { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+          ]}
+          activeOpacity={0.9}
+          onPress={() => onSelectVideo && onSelectVideo(item)}
+        >
+          {/* Thumbnail */}
+          <View style={[styles.thumbnailWrapper, { backgroundColor: colors.surfaceCardLight }]}>
+            <Image
+              source={{
+                uri:
+                  item.thumbnailUrl ||
+                  'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
+              }}
+              style={styles.thumbnail as any}
+              resizeMode="cover"
+            />
+
+            {/* Badges superiores (18+ & VERIFICADO & 4K) */}
+            <View style={styles.thumbnailTopBadges}>
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                <View style={styles.agePill}>
+                  <Text style={styles.agePillText}>18+</Text>
+                </View>
+                <View style={styles.verifiedPill}>
+                  <Text style={styles.verifiedPillText}>VERIFICADO</Text>
+                </View>
+              </View>
+
+              <View style={styles.qualityPill}>
+                <Text style={styles.qualityPillText}>4K</Text>
+              </View>
+            </View>
+
+            {/* Botón Central de Play */}
+            <View style={styles.centerPlayButton}>
+              <Play size={24} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 3 }} />
+            </View>
+
+            {/* Duración y Satisfacción */}
+            <View style={styles.bottomThumbRow}>
+              <View style={styles.ratingBadgePill}>
+                <ThumbsUp size={10} color="#30D158" style={{ marginRight: 3 }} />
+                <Text style={styles.ratingBadgeText}>{satisfactionPercent}%</Text>
+              </View>
+
+              <View style={styles.durationBadge}>
+                <Text style={styles.durationText}>{item.duration || '20:15'}</Text>
+              </View>
+            </View>
           </View>
 
-          {/* Tags o Hashtags asociados al video */}
-          {item.tags && item.tags.length > 0 && (
-            <View style={styles.videoTagsRow}>
-              {item.tags.slice(0, 3).map((tag, idx) => (
-                <View
-                  key={idx}
+          {/* Metadatos del Video */}
+          <View style={styles.videoInfoRow}>
+            <TouchableOpacity
+              style={styles.creatorAvatarWrapper}
+              onPress={() => onViewActor && onViewActor(item.actorId, item.actorName)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={{
+                  uri:
+                    item.actorAvatar ||
+                    item.creatorAvatar ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+                }}
+                style={styles.creatorAvatar as any}
+              />
+              <View style={styles.creatorAvatarCheck}>
+                <CheckCircle2 size={10} color="#000000" fill={colors.verifiedBlue} />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.titleContainer}>
+              <Text style={[styles.videoTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                {item.title}
+              </Text>
+              <View style={styles.creatorNameRow}>
+                <Text style={[styles.creatorName, { color: colors.textSecondary }]}>
+                  {item.actorName || item.creatorName || 'Canal Oficial'}
+                </Text>
+                <CheckCircle2 size={12} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
+                <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold', marginLeft: 4 }}>
+                  • {item.category || 'Para ti'}
+                </Text>
+              </View>
+
+              {/* Vistas y Fecha */}
+              <View style={styles.videoMetaStatsRow}>
+                <Eye size={11} color={colors.textMuted} style={{ marginRight: 4 }} />
+                <Text style={[styles.viewsCountText, { color: colors.textMuted }]}>
+                  {typeof item.views === 'number'
+                    ? `${(item.views / 1000).toFixed(1)}k vistas`
+                    : `${item.views || '15k'} vistas`}
+                </Text>
+                <Text style={[styles.viewsCountText, { color: colors.textMuted }]}> • HD 1080p</Text>
+              </View>
+
+              {/* Tags o Hashtags */}
+              {item.tags && item.tags.length > 0 && (
+                <View style={styles.videoTagsRow}>
+                  {item.tags.slice(0, 3).map((tag, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.miniTagBadge,
+                        { backgroundColor: colors.surfaceCardLight, borderColor: colors.border },
+                      ]}
+                    >
+                      <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Acciones Rápidas (Like y 3 Puntos) */}
+            <View style={styles.actionsColumn}>
+              <TouchableOpacity
+                style={styles.likeButton}
+                onPress={() => handleToggleLike(item)}
+                activeOpacity={0.7}
+              >
+                <Heart
+                  size={18}
+                  color={item.isLiked ? colors.primary : colors.textMuted}
+                  fill={item.isLiked ? colors.primary : 'transparent'}
+                />
+                <Text
                   style={[
-                    styles.miniTagBadge,
-                    { backgroundColor: colors.surfaceCardLight, borderColor: colors.border },
+                    styles.likeCountText,
+                    { color: colors.textSecondary },
+                    item.isLiked && { color: colors.primary, fontWeight: 'bold' },
                   ]}
                 >
-                  <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
-                </View>
-              ))}
+                  {item.likesCount > 999
+                    ? `${(item.likesCount / 1000).toFixed(1)}k`
+                    : item.likesCount}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.moreButton}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setSelectedVideoForOptions(item);
+                  setShowOptionsModal(true);
+                }}
+              >
+                <MoreVertical size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-          )}
-
-          {item.isNew && (
-            <View style={styles.newBadge}>
-              <Text style={styles.newBadgeText}>NUEVO</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Acciones Rápidas (Like y 3 Puntos Opciones) */}
-        <View style={styles.actionsColumn}>
-          <TouchableOpacity
-            style={styles.likeButton}
-            onPress={() => handleToggleLike(item)}
-            activeOpacity={0.7}
-          >
-            <Heart
-              size={18}
-              color={item.isLiked ? colors.primary : colors.textMuted}
-              fill={item.isLiked ? colors.primary : 'transparent'}
-            />
-            <Text
-              style={[
-                styles.likeCountText,
-                { color: colors.textSecondary },
-                item.isLiked && { color: colors.primary, fontWeight: 'bold' },
-              ]}
-            >
-              {item.likesCount > 999
-                ? `${(item.likesCount / 1000).toFixed(1)}k`
-                : item.likesCount}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Botón de 3 Puntos para Configuración y Opciones */}
-          <TouchableOpacity
-            style={styles.moreButton}
-            activeOpacity={0.7}
-            onPress={() => {
-              setSelectedVideoForOptions(item);
-              setShowOptionsModal(true);
-            }}
-          >
-            <MoreVertical size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
+          </View>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -355,7 +452,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         backgroundColor={colors.background}
       />
 
-      {/* 1. Header con Logo Oficial */}
+      {/* 1. Header con Logo Oficial y Acciones */}
       <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
         <BrandLogo size="small" />
 
@@ -381,7 +478,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </Text>
           </TouchableOpacity>
 
-          {/* Campanita de Notificaciones para el Usuario / Actor */}
+          {/* Campanita de Notificaciones */}
           {user && (
             <TouchableOpacity
               style={[
@@ -402,7 +499,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Foto de perfil / Botón de Acceso */}
+          {/* Avatar de Usuario */}
           <TouchableOpacity
             style={styles.avatarContainer}
             onPress={() => {
@@ -438,7 +535,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <Search size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
             <TextInput
               style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Buscar por título, categoría o #hashtag (#amateur, #pareja)..."
+              placeholder="Buscar videos, actrices, categorías (#amateur, #4k)..."
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -453,7 +550,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
       )}
 
-      {/* Modal de Autenticación / Registro */}
+      {/* Modal de Autenticación */}
       <Modal
         visible={showAuthModal}
         animationType="slide"
@@ -462,7 +559,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <AuthScreen onClose={() => setShowAuthModal(false)} />
       </Modal>
 
-      {/* Modal de Cuenta e Interfaz de Usuario */}
+      {/* Modal de Cuenta */}
       <AccountMenuModal
         visible={showAccountModal}
         onClose={() => setShowAccountModal(false)}
@@ -470,59 +567,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         onSelectVideo={onSelectVideo}
       />
 
-      {/* 1.5. Carrusel de Historias Efímeras (Stories 24h) */}
-      <StoriesCarousel
-        storyGroups={storyGroups}
-        onRefreshStories={fetchStories}
-        onViewActor={onViewActor}
-      />
-
-      {/* 2. Categorías / Chips de Posicionamiento */}
-      <View style={[styles.categoriesContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {categories.map((cat) => {
-            const isSelected = selectedCategory === cat.name;
-            const IconComp = cat.icon;
-            return (
-              <TouchableOpacity
-                key={cat.id}
-                style={[
-                  styles.categoryChip,
-                  { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                ]}
-                onPress={() => setSelectedCategory(cat.name)}
-                activeOpacity={0.8}
-              >
-                <IconComp
-                  size={14}
-                  color={isSelected ? '#FFFFFF' : colors.textPrimary}
-                  style={{ marginRight: 5 }}
-                />
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    { color: colors.textPrimary },
-                    isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
-                  ]}
-                >
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* 3. Feed Principal de Videos */}
+      {/* Feed Principal de Videos con todas las secciones líderes */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Cargando catálogo en alta definición...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Cargando catálogo premium en alta definición...
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -541,11 +592,147 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           }
           onEndReached={loadMoreVideos}
           onEndReachedThreshold={0.5}
+          ListHeaderComponent={
+            <View style={styles.listHeaderWrapper}>
+              {/* 1. Selector de Orientación Superior Estilo PornHub (HETERO, GAY, TRANS, VR) */}
+              <OrientationSwitcher
+                selected={orientation}
+                onSelect={(type) => setOrientation(type)}
+              />
+
+              {/* 2. Hero Spotlight VIP (El estreno exclusivo del día) */}
+              {featuredVideo && !searchQuery && (
+                <SpotlightHeroCard
+                  video={featuredVideo}
+                  onPress={() => onSelectVideo && onSelectVideo(featuredVideo)}
+                  onViewActor={onViewActor}
+                  onToggleSave={() => handleToggleLike(featuredVideo)}
+                  isSaved={featuredVideo.isLiked}
+                />
+              )}
+
+              {/* 3. Carrusel de Historias Efímeras 24h */}
+              <StoriesCarousel
+                storyGroups={storyGroups}
+                onRefreshStories={fetchStories}
+                onViewActor={onViewActor}
+              />
+
+              {/* 4. TexxxClips / Shorts Rápidos (Reels verticales 9:16) */}
+              {!searchQuery && (
+                <TexxxClipsSection
+                  videos={videoList}
+                  onSelectVideo={onSelectVideo}
+                />
+              )}
+
+              {/* 5. Top Modelos Verificados de la Semana con Rankings (Corona Dorada #1, Medallas) */}
+              {!searchQuery && (
+                <TopPornstarsSection
+                  actors={actorsList}
+                  onViewActor={onViewActor}
+                  onToggleFollow={handleToggleFollowActor}
+                />
+              )}
+
+              {/* 6. Banner Publicitario Nativo (TrafficJunky / Adult Ads Slot) */}
+              {!searchQuery && (
+                <AdBannerCard
+                  title="Juegos Para Adultos #1 Sin Tarjeta de Crédito"
+                  subtitle="Más de 50,000 jugadores en línea ahora mismo. Únete gratis en 10 segundos."
+                  ctaText="Jugar Gratis"
+                  imageUrl="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&auto=format&fit=crop"
+                  sponsorName="TrafficJunky Ads"
+                />
+              )}
+
+              {/* 7. Explorar por Categorías Populares con Miniaturas Fotográficas */}
+              {!searchQuery && (
+                <VisualCategoriesGrid
+                  onSelectCategory={(catName) => setSelectedCategory(catName)}
+                />
+              )}
+
+              {/* 8. Top 5 Videos Más Vistos (Ranking con Grandes Números 01, 02, 03) */}
+              {!searchQuery && (
+                <TrendingRankingsSection
+                  videos={videoList}
+                  onSelectVideo={onSelectVideo}
+                />
+              )}
+
+              {/* 9. Transmisiones en Vivo / Cams Teaser con Sala Interactiva */}
+              {!searchQuery && (
+                <LiveCamsTeaser />
+              )}
+
+              {/* 10. Zona de Videojuegos +18 y Nutaku */}
+              {!searchQuery && (
+                <GamesTeaserBanner />
+              )}
+
+              {/* 11. Header del Catálogo y Filtros de Categoría */}
+              <View style={[styles.catalogHeaderBox, { borderBottomColor: colors.border }]}>
+                <View style={styles.catalogTitleRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Film size={16} color={colors.primary} />
+                    <Text style={[styles.catalogMainTitle, { color: colors.textPrimary }]}>
+                      {searchQuery ? `Buscando: "${searchQuery}"` : 'Catálogo de Videos'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.catalogCountBadge, { color: colors.textMuted }]}>
+                    {displayedVideos.length} títulos
+                  </Text>
+                </View>
+
+                {/* Chips de Categorías */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoryScroll}
+                >
+                  {categories.map((cat) => {
+                    const isSelected = selectedCategory === cat.name;
+                    const IconComp = cat.icon;
+                    return (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryChip,
+                          { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+                          isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                        ]}
+                        onPress={() => setSelectedCategory(cat.name)}
+                        activeOpacity={0.8}
+                      >
+                        <IconComp
+                          size={13}
+                          color={isSelected ? '#FFFFFF' : colors.textPrimary}
+                          style={{ marginRight: 5 }}
+                        />
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            { color: colors.textPrimary },
+                            isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
+                          ]}
+                        >
+                          {cat.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+          }
           ListFooterComponent={
             loadingMore ? (
               <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>Cargando más videos...</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>
+                  Cargando más videos...
+                </Text>
               </View>
             ) : null
           }
@@ -565,7 +752,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         />
       )}
 
-      {/* 4. Modal de 3 Puntos (Opciones y Configuración) */}
+      {/* Modal de 3 Puntos (Opciones y Configuración) */}
       <VideoOptionsModal
         visible={showOptionsModal}
         video={selectedVideoForOptions}
@@ -579,7 +766,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }}
       />
 
-      {/* 5. Modal de Notificaciones en Tiempo Real */}
+      {/* Modal de Notificaciones en Tiempo Real */}
       <NotificationsModal
         visible={showNotificationsModal}
         onClose={() => {
@@ -601,112 +788,126 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+  },
+  searchButtonText: {
+    fontSize: 12,
+  },
   notifButton: {
     padding: 8,
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   notifBadgeCircle: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -3,
+    right: -3,
     backgroundColor: '#FF2D55',
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: '#000000',
   },
   notifBadgeText: {
     color: '#FFFFFF',
     fontSize: 9,
     fontWeight: 'bold',
   },
-  searchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    gap: 6,
-    borderWidth: 1,
-  },
-  searchButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  searchInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    padding: 0,
-  },
   avatarContainer: {
     position: 'relative',
   },
   headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1.5,
   },
   avatarGuestPlaceholder: {
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   onlineDot: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: '#30D158',
     borderWidth: 1.5,
-    borderColor: '#000000',
+    borderColor: '#0A0A0E',
   },
-  categoriesContainer: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+  searchBarContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  listHeaderWrapper: {
+    paddingBottom: 4,
+  },
+  catalogHeaderBox: {
+    marginTop: 8,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    borderBottomWidth: 0.5,
+    paddingBottom: 10,
+  },
+  catalogTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  catalogMainTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  catalogCountBadge: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   categoryScroll: {
-    paddingHorizontal: 16,
     gap: 8,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
   },
   categoryChipText: {
@@ -714,19 +915,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   feedList: {
-    padding: 16,
-    paddingBottom: 30,
-    gap: 18,
+    paddingBottom: 20,
   },
   videoCard: {
+    marginHorizontal: 12,
+    marginBottom: 14,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
   },
   thumbnailWrapper: {
-    position: 'relative',
     width: '100%',
     height: 200,
+    position: 'relative',
+    backgroundColor: '#1E1E28',
   },
   thumbnail: {
     width: '100%',
@@ -734,67 +936,99 @@ const styles = StyleSheet.create({
   },
   thumbnailTopBadges: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: 8,
+    left: 8,
+    right: 8,
     flexDirection: 'row',
-    gap: 6,
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   agePill: {
-    backgroundColor: '#E50914',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
   },
   agePillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  verifiedPill: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 0.5,
-    borderColor: '#0084FF',
-  },
-  verifiedPillText: {
-    color: '#0084FF',
+    color: '#FF3B30',
     fontSize: 9,
     fontWeight: 'bold',
   },
+  verifiedPill: {
+    backgroundColor: '#0084FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verifiedPillText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  qualityPill: {
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#05D9E8',
+  },
+  qualityPillText: {
+    color: '#05D9E8',
+    fontSize: 9,
+    fontWeight: '900',
+  },
   centerPlayButton: {
     position: 'absolute',
-    top: '50%',
+    top: '40%',
     left: '50%',
     transform: [{ translateX: -24 }, { translateY: -24 }],
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+  },
+  bottomThumbRow: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ratingBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ratingBadgeText: {
+    color: '#30D158',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   durationBadge: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   durationText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
   },
   videoInfoRow: {
     flexDirection: 'row',
-    padding: 12,
-    alignItems: 'flex-start',
+    padding: 10,
     gap: 10,
   },
   creatorAvatarWrapper: {
@@ -816,23 +1050,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   videoTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
-    marginBottom: 3,
+    lineHeight: 18,
+    marginBottom: 4,
   },
   creatorNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 3,
   },
   creatorName: {
     fontSize: 12,
+  },
+  videoMetaStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  viewsCountText: {
+    fontSize: 10,
   },
   videoTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: 4,
+    marginTop: 2,
   },
   miniTagBadge: {
     paddingHorizontal: 6,
@@ -841,27 +1085,12 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
   },
   miniTagText: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  newBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(229, 9, 20, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginTop: 4,
-    borderWidth: 0.5,
-    borderColor: '#E50914',
-  },
-  newBadgeText: {
-    color: '#E50914',
     fontSize: 9,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   actionsColumn: {
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   likeButton: {
     alignItems: 'center',

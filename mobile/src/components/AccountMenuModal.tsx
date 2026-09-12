@@ -167,21 +167,29 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
     }
   };
 
-  const handleCreatePlaylist = () => {
+  const handleCreatePlaylist = async () => {
     if (!newPlaylistTitle.trim()) {
       Alert.alert('Error', 'Ingresa un nombre para la lista de reproducción');
       return;
     }
-    const newPl = {
-      id: `pl_${Date.now()}`,
-      title: newPlaylistTitle.trim(),
-      count: 0,
-      thumb: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=400',
-    };
-    setPlaylists([newPl, ...playlists]);
-    setNewPlaylistTitle('');
-    setShowCreatePlaylistModal(false);
-    Alert.alert('¡Éxito!', `Lista "${newPl.title}" creada correctamente.`);
+    try {
+      if (userToken) {
+        const created = await api.user.createPlaylist(userToken, newPlaylistTitle.trim());
+        if (created) {
+          setPlaylists([created, ...playlists]);
+        } else {
+          setPlaylists([
+            { id: `pl_${Date.now()}`, title: newPlaylistTitle.trim(), count: 0 },
+            ...playlists,
+          ]);
+        }
+      }
+      setNewPlaylistTitle('');
+      setShowCreatePlaylistModal(false);
+      Alert.alert('¡Éxito!', 'Lista creada correctamente.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo crear la lista');
+    }
   };
 
   const toggleSubscription = (id: string) => {
@@ -190,14 +198,45 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
     );
   };
 
-  const removeLikedVideo = (id: string) => {
+  const removeLikedVideo = async (id: string) => {
     setLikedVideos((prev) => prev.filter((v) => v.id !== id));
+    if (userToken) {
+      try {
+        await api.videos.toggleLike(userToken, id);
+      } catch (err) {
+        console.log('Error removing like:', err);
+      }
+    }
+  };
+
+  const removeWatchLater = async (id: string) => {
+    setWatchLaterList((prev) => prev.filter((w) => w.id !== id));
+    if (userToken) {
+      try {
+        await api.videos.toggleWatchLater(userToken, id);
+      } catch (err) {
+        console.log('Error removing watch later:', err);
+      }
+    }
   };
 
   const clearHistory = () => {
     Alert.alert('Limpiar Historial', '¿Deseas eliminar todo tu historial de reproducción?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Limpiar Todo', style: 'destructive', onPress: () => setHistoryVideos([]) },
+      {
+        text: 'Limpiar Todo',
+        style: 'destructive',
+        onPress: async () => {
+          setHistoryVideos([]);
+          if (userToken) {
+            try {
+              await api.user.clearHistory(userToken);
+            } catch (err) {
+              console.log('Error clearing history:', err);
+            }
+          }
+        },
+      },
     ]);
   };
 
@@ -669,7 +708,7 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
               <View style={styles.metricsGrid}>
                 <View style={styles.metricCard}>
                   <Eye size={20} color={COLORS.neonLime} />
-                  <Text style={styles.metricValue}>2,489</Text>
+                  <Text style={styles.metricValue}>{historyVideos.length}</Text>
                   <Text style={styles.metricLabel}>Videos Vistos</Text>
                 </View>
                 <View style={styles.metricCard}>
@@ -709,7 +748,13 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
               <Text style={styles.subViewTitle}>👤 Información de Cuenta</Text>
 
               <View style={styles.profileDetailCard}>
-                <Image source={{ uri: user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200' }} style={styles.profileBigAvatar} />
+                {user.avatarUrl ? (
+                  <Image source={{ uri: user.avatarUrl }} style={styles.profileBigAvatar} />
+                ) : (
+                  <View style={[styles.profileBigAvatar, { backgroundColor: '#333333', justifyContent: 'center', alignItems: 'center' }]}>
+                    <User size={46} color="#888888" />
+                  </View>
+                )}
                 <Text style={styles.profileBigName}>{user.username}</Text>
                 <Text style={styles.profileBigEmail}>{user.email}</Text>
                 <View style={styles.roleBadgeBox}>
@@ -850,7 +895,7 @@ export const AccountMenuModal: React.FC<AccountMenuModalProps> = ({
                     <Text style={styles.videoItemMeta}>{item.duration}</Text>
                   </View>
                   <TouchableOpacity
-                    onPress={() => setWatchLaterList(watchLaterList.filter((w) => w.id !== item.id))}
+                    onPress={() => removeWatchLater(item.id)}
                   >
                     <Trash2 size={18} color="#FF3B30" />
                   </TouchableOpacity>
