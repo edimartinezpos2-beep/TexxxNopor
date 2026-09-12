@@ -14,17 +14,8 @@ import { Download, CheckCircle2, ShieldAlert, Globe } from 'lucide-react-native'
 import { api } from '../services/api';
 import { COLORS } from '../theme/colors';
 
-// Lee la versión real desde app.json (2 niveles arriba: mobile/src/components -> mobile/app.json)
-let resolvedVersion = '2.4.3';
-try {
-  const appJson = require('../../app.json');
-  if (appJson?.expo?.version) {
-    resolvedVersion = appJson.expo.version;
-  }
-} catch {
-  resolvedVersion = '2.4.3';
-}
-const APP_VERSION: string = resolvedVersion;
+// Versión actual de la app sincronizada con app.json (v2.4.3)
+const APP_VERSION = '2.4.3';
 
 export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // En versión Web, la aplicación se actualiza de forma automática en el navegador (nunca mostrar ventana de force update)
