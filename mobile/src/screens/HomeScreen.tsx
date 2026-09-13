@@ -330,7 +330,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         >
           {/* Thumbnail */}
           <View style={[styles.thumbnailWrapper, { backgroundColor: colors.surfaceCardLight }]}>
-            <Image
+          <Image
               source={{
                 uri:
                   item.thumbnailUrl ||
@@ -338,6 +338,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               }}
               style={styles.thumbnail as any}
               resizeMode="cover"
+              onError={() => {
+                // Si la imagen falla (URL rota / 404 de Render), reemplazar con fallback Unsplash
+                if (item.thumbnailUrl && !item.thumbnailUrl.includes('unsplash')) {
+                  (item as any).thumbnailUrl = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+                }
+              }}
             />
 
             {/* Badges superiores (18+ & VERIFICADO & 4K) */}

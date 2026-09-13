@@ -96,7 +96,69 @@ export interface AdminUserItem {
   username: string;
   role: UserRole;
   isVerified: boolean;
+  isSuspended?: boolean;
+  suspensionReason?: string | null;
+  kycStatus?: string;
+  isVip?: boolean;
+  avatarUrl?: string | null;
+  activityCount?: number;
   createdAt: string;
+}
+
+export interface KycItem {
+  id: string;
+  userId: string;
+  documentType: string;
+  documentNumber: string;
+  fullName: string;
+  birthDate?: string | null;
+  frontDocumentUrl: string;
+  backDocumentUrl?: string | null;
+  selfieWithDocUrl: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    role: UserRole;
+    avatarUrl?: string | null;
+  };
+}
+
+export interface ReportItem {
+  id: string;
+  reason: string;
+  description: string;
+  evidenceUrl?: string | null;
+  status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+  resolutionNotes?: string | null;
+  createdAt: string;
+  reporterEmail: string;
+  reporter?: { id: string; email: string; username: string };
+  targetUser?: { id: string; email: string; username: string; isSuspended: boolean };
+  video?: {
+    id: string;
+    title: string;
+    thumbnailUrl?: string;
+    videoUrl?: string;
+    status: string;
+    actor?: { name: string; stageName: string };
+  };
+}
+
+export interface AuditLogItem {
+  id: string;
+  adminId: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  details?: string | null;
+  ipAddress?: string | null;
+  createdAt: string;
+  admin?: { id: string; email: string; username: string; avatarUrl?: string };
 }
 
 export interface AuthState {

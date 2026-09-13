@@ -23,6 +23,9 @@ import { sendPasswordRecoveryEmail } from './services/emailService';
 import { NotificationService } from './services/notification.service';
 import { WompiService } from './services/wompi.service';
 import { CloudinaryService } from './services/cloudinary.service';
+import { AuditService } from './services/audit.service';
+import { SettingsService } from './services/settings.service';
+import adminSuiteRouter from './routes/admin_suite.routes';
 
 dotenv.config();
 
@@ -56,7 +59,7 @@ fs.mkdirSync(UPLOADS_IMAGES_DIR, { recursive: true });
 app.use(cors());
 app.use(express.json({ limit: '1024mb' }));
 app.use(express.urlencoded({ limit: '1024mb', extended: true }));
-app.use('/uploads', express.static(UPLOADS_DIR));
+// Nota: /uploads/images y /uploads/videos se sirven más abajo con fallback CDN automático
 
 // Servir frontend web de TexxxNopor automáticamente si existe la compilación
 const WEB_DIST_PATH = path.join(__dirname, '../../mobile/dist');
@@ -68,10 +71,16 @@ if (fs.existsSync(WEB_DIST_PATH)) {
 }
 
 // Streaming de video de alto rendimiento con soporte de HTTP 206 (Partial Content / Ranges)
+// Si el archivo NO existe en disco (Render borra /uploads en restart) → redirige a CDN fallback
+const FALLBACK_VIDEO_CDN = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+const FALLBACK_IMAGE_CDN = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+
 app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   const filePath = path.join(UPLOADS_VIDEOS_DIR, req.params.filename);
   if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'Video no encontrado en el servidor' });
+    // Redirigir al CDN de respaldo para que el reproductor no falle
+    console.warn(`[Stream] Archivo no encontrado en disco: ${req.params.filename} → redirigiendo a CDN fallback`);
+    return res.redirect(302, FALLBACK_VIDEO_CDN);
   }
 
   const stat = fs.statSync(filePath);
@@ -108,6 +117,29 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
     fs.createReadStream(filePath).pipe(res);
   }
 });
+
+// Servir archivos estáticos de /uploads con fallback a CDN cuando no existen en disco
+// Videos: ya manejados arriba con /api/stream/video/:filename
+app.use('/uploads/images', (req: Request, res: Response, next: any) => {
+  const filename = req.path.replace(/^\//, '');
+  const filePath = path.join(UPLOADS_IMAGES_DIR, filename);
+  if (filename && !fs.existsSync(filePath)) {
+    console.warn(`[Static] Imagen no encontrada en disco: ${filename} → fallback CDN`);
+    return res.redirect(302, FALLBACK_IMAGE_CDN);
+  }
+  next();
+}, express.static(UPLOADS_IMAGES_DIR));
+
+// Videos estáticos (fallback si alguien accede directo a /uploads/videos)
+app.use('/uploads/videos', (req: Request, res: Response, next: any) => {
+  const filename = req.path.replace(/^\//, '');
+  const filePath = path.join(UPLOADS_VIDEOS_DIR, filename);
+  if (filename && !fs.existsSync(filePath)) {
+    console.warn(`[Static] Video no encontrado en disco: ${filename} → fallback CDN`);
+    return res.redirect(302, FALLBACK_VIDEO_CDN);
+  }
+  next();
+}, express.static(UPLOADS_VIDEOS_DIR));
 
 // ====================================================
 // RUTAS DIRECTAS DE DESCARGA DE APK INSTALABLE
@@ -513,6 +545,39 @@ function formatVideoItem(v: any, currentUserId?: string, userFavorites?: Set<str
     v.actor?.avatarUrl ||
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop';
 
+  // Sanitizar URLs de /uploads que serán 404 en Render tras restart
+  // Si la URL apunta a /uploads/... en el servidor Render y el archivo no está en disco → CDN fallback
+  const sanitizeVideoUrl = (url?: string | null): string => {
+    if (!url) return 'https://vjs.zencdn.net/v/oceans.mp4';
+    // Si ya es una URL externa (no del servidor local/Render uploads), usar tal cual
+    const isRenderUpload = url.includes('texxxnopor-backend.onrender.com/uploads/') ||
+      url.includes('192.168.') ||
+      url.includes('localhost');
+    if (!isRenderUpload) return url;
+    // Verificar si el archivo existe localmente (si el servidor tiene el archivo)
+    try {
+      const filename = url.split('/uploads/videos/').pop() || '';
+      const localPath = path.join(UPLOADS_VIDEOS_DIR, filename);
+      if (filename && fs.existsSync(localPath)) return url;
+    } catch (_) {}
+    // Archivo no existe en disco → fallback CDN
+    return 'https://vjs.zencdn.net/v/oceans.mp4';
+  };
+
+  const sanitizeThumbnailUrl = (url?: string | null): string => {
+    if (!url) return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+    const isRenderUpload = url.includes('texxxnopor-backend.onrender.com/uploads/') ||
+      url.includes('192.168.') ||
+      url.includes('localhost');
+    if (!isRenderUpload) return url;
+    try {
+      const filename = url.split('/uploads/images/').pop() || '';
+      const localPath = path.join(UPLOADS_IMAGES_DIR, filename);
+      if (filename && fs.existsSync(localPath)) return url;
+    } catch (_) {}
+    return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+  };
+
   return {
     id: v.id,
     title: v.title,
@@ -522,13 +587,11 @@ function formatVideoItem(v: any, currentUserId?: string, userFavorites?: Set<str
     views: viewsNum >= 1000 ? `${Math.round(viewsNum / 1000)}k vistas` : `${viewsNum} vistas`,
     viewsCount: viewsNum,
     likesCount: likesNum,
-    thumbnailUrl:
-      v.thumbnailUrl ||
-      'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
+    thumbnailUrl: sanitizeThumbnailUrl(v.thumbnailUrl),
     thumbnailPublicId: v.thumbnailPublicId || undefined,
-    videoUrl: v.videoUrl || 'https://vjs.zencdn.net/v/oceans.mp4',
+    videoUrl: sanitizeVideoUrl(v.videoUrl),
     cloudinaryPublicId: v.cloudinaryPublicId || undefined,
-    hlsMasterUrl: v.hlsMasterUrl || 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    hlsMasterUrl: sanitizeVideoUrl(v.hlsMasterUrl || v.videoUrl),
     category: v.category?.name || 'Para ti',
     tags: v.tagsList || [],
     isNew: Date.now() - new Date(v.createdAt).getTime() < 3 * 24 * 60 * 60 * 1000,
@@ -1280,6 +1343,16 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    if (user.isSuspended) {
+      return res.status(403).json({
+        error: `Tu cuenta se encuentra suspendida por la administración de la plataforma. Motivo: ${
+          user.suspensionReason || 'Incumplimiento de términos legales o conductas no permitidas'
+        }. Para apelaciones o soporte, contacta a legal@texxxnopor.com.`,
+        isSuspended: true,
+        suspensionReason: user.suspensionReason,
+      });
+    }
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
@@ -1297,6 +1370,9 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         authProvider: user.authProvider,
         avatarUrl: user.avatarUrl,
         isVerified: user.isVerified,
+        isSuspended: user.isSuspended,
+        suspensionReason: user.suspensionReason,
+        kycStatus: user.kycStatus,
       },
     });
   } catch (error: any) {
@@ -1322,6 +1398,9 @@ app.get('/api/auth/me', authenticateJWT, async (req: Request, res: Response) => 
         authProvider: user.authProvider,
         avatarUrl: user.avatarUrl,
         isVerified: user.isVerified,
+        isSuspended: user.isSuspended,
+        suspensionReason: user.suspensionReason,
+        kycStatus: user.kycStatus,
       },
     });
   } catch (error) {
@@ -2636,14 +2715,26 @@ app.get(
   async (req: Request, res: Response) => {
     try {
       const users = await prisma.user.findMany({
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           email: true,
           username: true,
           role: true,
           isVerified: true,
+          isSuspended: true,
+          suspensionReason: true,
+          kycStatus: true,
+          isVip: true,
+          avatarUrl: true,
           createdAt: true,
+          _count: {
+            select: {
+              comments: true,
+              videoLikes: true,
+              favorites: true,
+            },
+          },
         },
       });
 
@@ -2654,6 +2745,12 @@ app.get(
           username: u.username,
           role: u.role,
           isVerified: u.isVerified,
+          isSuspended: u.isSuspended,
+          suspensionReason: u.suspensionReason,
+          kycStatus: u.kycStatus,
+          isVip: u.isVip,
+          avatarUrl: u.avatarUrl,
+          activityCount: u._count.comments + u._count.videoLikes + u._count.favorites,
           createdAt: u.createdAt.toISOString(),
         })),
       });
@@ -2671,17 +2768,23 @@ app.patch(
   async (req: Request, res: Response) => {
     const { id } = req.params;
     const { role } = req.body;
+    const adminId = req.user!.id;
 
     if (!role || !['ADMIN', 'CREATOR', 'CONSUMER'].includes(role)) {
       return res.status(400).json({ error: 'Rol inválido proporcionado' });
     }
 
     try {
+      const targetUser = await prisma.user.findUnique({ where: { id } });
+      if (!targetUser) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
       const updated = await prisma.user.update({
         where: { id },
         data: {
           role: role as PrismaRole,
-          isVerified: role === 'ADMIN' || role === 'CREATOR',
+          isVerified: role === 'ADMIN' || (role === 'CREATOR' && targetUser.kycStatus === 'APPROVED'),
         },
         select: {
           id: true,
@@ -2689,25 +2792,91 @@ app.patch(
           username: true,
           role: true,
           isVerified: true,
+          isSuspended: true,
+          suspensionReason: true,
+          kycStatus: true,
           createdAt: true,
         },
       });
 
+      await AuditService.log({
+        adminId,
+        action: 'ROLE_CHANGE',
+        entityType: 'USER',
+        entityId: id,
+        details: { targetUsername: updated.username, oldRole: targetUser.role, newRole: role },
+        ipAddress: req.ip,
+      });
+
       return res.json({
         status: 'success',
-        message: 'Rol de usuario actualizado con éxito',
+        message: `Rol de ${updated.username} actualizado a ${updated.role}`,
         user: {
-          id: updated.id,
-          email: updated.email,
-          username: updated.username,
-          role: updated.role,
-          isVerified: updated.isVerified,
+          ...updated,
           createdAt: updated.createdAt.toISOString(),
         },
       });
     } catch (err: any) {
       console.error('Error updating user role:', err);
       return res.status(500).json({ error: 'No se pudo actualizar el rol del usuario' });
+    }
+  }
+);
+
+// Suspender o reactivar cuenta de usuario (ADMIN ONLY)
+app.patch(
+  '/api/admin/users/:id/suspend',
+  authenticateJWT,
+  requireRole(UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { isSuspended, reason } = req.body;
+    const adminId = req.user!.id;
+
+    if (id === adminId && isSuspended) {
+      return res.status(400).json({
+        error: 'Por seguridad, no puedes suspender tu propia cuenta de Administrador principal.',
+      });
+    }
+
+    try {
+      const targetUser = await prisma.user.findUnique({ where: { id } });
+      if (!targetUser) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      const updated = await prisma.user.update({
+        where: { id },
+        data: {
+          isSuspended: !!isSuspended,
+          suspensionReason: isSuspended ? (reason || 'Violación de los Términos y Políticas de Servicio') : null,
+        },
+      });
+
+      await AuditService.log({
+        adminId,
+        action: isSuspended ? 'USER_SUSPEND' : 'USER_ACTIVATE',
+        entityType: 'USER',
+        entityId: id,
+        details: { targetUsername: updated.username, reason },
+        ipAddress: req.ip,
+      });
+
+      return res.json({
+        status: 'success',
+        message: isSuspended
+          ? `Usuario ${updated.username} ha sido suspendido.`
+          : `Usuario ${updated.username} ha sido reactivado.`,
+        user: {
+          id: updated.id,
+          username: updated.username,
+          isSuspended: updated.isSuspended,
+          suspensionReason: updated.suspensionReason,
+        },
+      });
+    } catch (err: any) {
+      console.error('Error in suspend user:', err);
+      return res.status(500).json({ error: 'Error al cambiar estado de suspensión del usuario' });
     }
   }
 );
@@ -2830,6 +2999,8 @@ app.delete(
       }
 
       // Eliminar relaciones en cascada para evitar restricciones de clave foránea
+      await prisma.kycVerification.deleteMany({ where: { userId: id } });
+      await prisma.contentReport.deleteMany({ where: { OR: [{ reporterId: id }, { targetUserId: id }] } });
       await prisma.comment.deleteMany({ where: { userId: id } });
       await prisma.videoLike.deleteMany({ where: { userId: id } });
       await prisma.favorite.deleteMany({ where: { userId: id } });
@@ -2839,6 +3010,15 @@ app.delete(
       await prisma.creatorProfile.deleteMany({ where: { userId: id } });
 
       await prisma.user.delete({ where: { id } });
+
+      await AuditService.log({
+        adminId: requestingAdminId,
+        action: 'USER_DELETE',
+        entityType: 'USER',
+        entityId: id,
+        details: { deletedEmail: userToDelete.email, deletedUsername: userToDelete.username },
+        ipAddress: req.ip,
+      });
 
       return res.json({
         status: 'success',
@@ -4221,6 +4401,22 @@ app.post(
       return res.status(400).json({ error: 'El título del video es obligatorio' });
     }
 
+    // Control Legal y Verificación de Edad/Identidad (KYC) para creadores
+    if (req.user!.role === UserRole.CREATOR && req.user!.id && !req.user!.id.startsWith('usr_')) {
+      const creatorUser = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { isVerified: true, kycStatus: true, username: true },
+      });
+      if (!creatorUser?.isVerified && creatorUser?.kycStatus !== 'APPROVED') {
+        return res.status(403).json({
+          error:
+            'Control Legal y Verificación KYC requerida: Para publicar videos como creador en TexxxNopor debes validar tu documento de identidad (cédula o pasaporte) y esperar la aprobación administrativa.',
+          requiresKyc: true,
+          kycStatus: creatorUser?.kycStatus || 'NONE',
+        });
+      }
+    }
+
     try {
       // 1. Categoría
       let categoryRecord = null;
@@ -5038,6 +5234,11 @@ app.post('/api/videos/:id/comments', authenticateJWT, async (req: Request, res: 
     return res.status(500).json({ error: 'Error al publicar comentario' });
   }
 });
+
+// ====================================================
+// MONTAJE DE LA SUITE ADMINISTRATIVA INTEGRAL (KYC, DMCA, FINANZAS, AUDITORÍA)
+// ====================================================
+app.use(adminSuiteRouter);
 
 // Enrutamiento SPA para Frontend Web (sirve index.html para rutas que no sean API)
 app.get('*', (req: Request, res: Response, next: any) => {

@@ -1,8 +1,28 @@
 // Cliente de API Móvil y Web para TexxxNopor Streaming Platform
 import { Platform } from 'react-native';
-import { UserProfile, UserRole, ActorItem, VideoItem, CommentItem, AdminUserItem } from '../types/auth';
+import {
+  UserProfile,
+  UserRole,
+  ActorItem,
+  VideoItem,
+  CommentItem,
+  AdminUserItem,
+  KycItem,
+  ReportItem,
+  AuditLogItem,
+} from '../types/auth';
 
-export type { UserProfile, UserRole, ActorItem, VideoItem, CommentItem, AdminUserItem };
+export type {
+  UserProfile,
+  UserRole,
+  ActorItem,
+  VideoItem,
+  CommentItem,
+  AdminUserItem,
+  KycItem,
+  ReportItem,
+  AuditLogItem,
+};
 
 export interface UserStats {
   subscriptionsCount: number;
@@ -40,8 +60,19 @@ export interface ActorStoryGroup {
   latestCreatedAt: string;
 }
 
-// URL de producción alojada en la nube de Render (24/7 con PC apagado)
+// URL de API: dinámica según entorno
 const getApiBaseUrl = (): string => {
+  // En navegador web: usar la misma origen que la página para evitar CORS/Mixed Content
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && Platform.OS === 'web') {
+    const hostname = window.location.hostname;
+    // En desarrollo local
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:4000';
+    }
+    // En producción web (Render / cualquier dominio), usar el origin del backend desplegado
+    return 'https://texxxnopor-backend.onrender.com';
+  }
+  // En app nativa (iOS / Android) → siempre el backend de producción en Render
   return 'https://texxxnopor-backend.onrender.com';
 };
 
@@ -1075,13 +1106,13 @@ export const api = {
       token: string,
       fileOrUri: any
     ): Promise<{ secure_url: string; public_id: string } | null> {
-      return new Promise((resolve) => {
+      return new Promise(async (resolve) => {
         try {
           const formData = new FormData();
           let targetUri = typeof fileOrUri === 'string' ? fileOrUri : fileOrUri?.uri || '';
           let fileName =
             typeof fileOrUri === 'string'
-              ? fileOrUri.split('/').pop() || 'image.jpg'
+              ? targetUri.split('/').pop() || 'image.jpg'
               : fileOrUri?.name || fileOrUri?.fileName || 'image.jpg';
 
           if (!fileName.includes('.')) fileName += '.jpg';
@@ -1089,12 +1120,38 @@ export const api = {
           let mime = 'image/jpeg';
           if (ext === 'png') mime = 'image/png';
           else if (ext === 'webp') mime = 'image/webp';
+          else if (ext === 'gif') mime = 'image/gif';
 
-          formData.append('image', {
-            uri: targetUri,
-            name: fileName,
-            type: mime,
-          } as any);
+          // En Web (navegador): FormData necesita un Blob o File real, no un objeto JS plano
+          const isWebEnv = Platform.OS === 'web' || (typeof window !== 'undefined' && typeof document !== 'undefined');
+          if (isWebEnv) {
+            try {
+              let blob: Blob;
+              if (fileOrUri instanceof Blob || fileOrUri instanceof File) {
+                blob = fileOrUri;
+              } else if (typeof targetUri === 'string' && (targetUri.startsWith('blob:') || targetUri.startsWith('data:'))) {
+                // URI blob o data URL generada por expo-image-picker en web
+                const response = await fetch(targetUri);
+                blob = await response.blob();
+              } else {
+                // Último intento: fetch normal
+                const response = await fetch(targetUri);
+                blob = await response.blob();
+              }
+              formData.append('image', blob, fileName);
+            } catch (blobErr) {
+              console.warn('[Upload] No se pudo convertir a Blob:', blobErr);
+              resolve(null);
+              return;
+            }
+          } else {
+            // En React Native nativo: objeto {uri, name, type} es correcto para XHR/FormData
+            formData.append('image', {
+              uri: targetUri,
+              name: fileName,
+              type: mime,
+            } as any);
+          }
 
           const xhr = new XMLHttpRequest();
           xhr.open('POST', `${API_BASE_URL}/api/upload/image`);
@@ -1126,6 +1183,7 @@ export const api = {
           xhr.timeout = 60000;
           xhr.send(formData);
         } catch (err) {
+          console.warn('[Upload Image Exception]', err);
           resolve(null);
         }
       });
@@ -1208,6 +1266,139 @@ export const api = {
       return res ? true : false;
     },
 
+    async suspendUser(
+      token: string,
+      userId: string,
+      isSuspended: boolean,
+      reason?: string
+    ): Promise<{ status: string; message: string; user: any } | null> {
+      return await apiFetch<{ status: string; message: string; user: any }>(
+        `/api/admin/users/${userId}/suspend`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ isSuspended, reason }),
+        }
+      );
+    },
+
+    // 1. KYC y Control Legal
+    async getKycSubmissions(token: string, status?: string): Promise<KycItem[]> {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      const res = await apiFetch<{ total: number; submissions: KycItem[] }>(`/api/admin/kyc${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.submissions || [];
+    },
+
+    async reviewKyc(
+      token: string,
+      kycId: string,
+      status: 'APPROVED' | 'REJECTED',
+      rejectionReason?: string
+    ): Promise<{ status: string; message: string; kyc: any } | null> {
+      return await apiFetch<{ status: string; message: string; kyc: any }>(
+        `/api/admin/kyc/${kycId}/review`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ status, rejectionReason }),
+        }
+      );
+    },
+
+    // 2. Soporte y Disputas / DMCA
+    async getReports(token: string, status?: string, reason?: string): Promise<ReportItem[]> {
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      if (reason) params.append('reason', reason);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await apiFetch<{ total: number; reports: ReportItem[] }>(`/api/admin/reports${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.reports || [];
+    },
+
+    async resolveReport(
+      token: string,
+      reportId: string,
+      data: { status: string; resolutionNotes?: string; actionTaken?: string }
+    ): Promise<{ status: string; message: string; report: any } | null> {
+      return await apiFetch<{ status: string; message: string; report: any }>(
+        `/api/admin/reports/${reportId}/resolve`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(data),
+        }
+      );
+    },
+
+    // 3. Catálogo y Moderación de Videos
+    async getModerationVideos(token: string, status?: string): Promise<any[]> {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      const res = await apiFetch<{ total: number; videos: any[] }>(
+        `/api/admin/videos/moderation${query}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      return res?.videos || [];
+    },
+
+    async moderateVideo(
+      token: string,
+      videoId: string,
+      action: 'APPROVE' | 'REJECT' | 'FLAG' | 'TAKEDOWN',
+      reason?: string
+    ): Promise<{ status: string; message: string; video: any } | null> {
+      return await apiFetch<{ status: string; message: string; video: any }>(
+        `/api/admin/videos/${videoId}/moderate`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action, reason }),
+        }
+      );
+    },
+
+    // Categorías del catálogo
+    async getCategories(token: string): Promise<any[]> {
+      const res = await apiFetch<{ categories: any[] }>('/api/admin/categories', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.categories || [];
+    },
+
+    async createCategory(token: string, name: string, description?: string): Promise<any> {
+      return await apiFetch<{ status: string; category: any }>('/api/admin/categories', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, description }),
+      });
+    },
+
+    async deleteCategory(token: string, id: string): Promise<any> {
+      return await apiFetch<{ status: string; message: string }>(`/api/admin/categories/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    // Monitoreo de Almacenamiento y CDN
+    async getStorageStats(token: string): Promise<any> {
+      return await apiFetch<any>('/api/admin/storage/stats', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    // 4. Métricas y Analíticas
+    async getAnalyticsOverview(token: string): Promise<any> {
+      return await apiFetch<any>('/api/admin/analytics/overview', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
     async getAnalytics(token: string): Promise<{
       totalUsers: number;
       premiumUsersCount: number;
@@ -1235,6 +1426,139 @@ export const api = {
     } | null> {
       return await apiFetch<any>('/api/admin/analytics', {
         headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    // 5. Finanzas y Payouts
+    async getFinanceOverview(token: string): Promise<any> {
+      return await apiFetch<any>('/api/admin/finance/overview', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    async getPayouts(token: string): Promise<any[]> {
+      const res = await apiFetch<{ total: number; payouts: any[] }>('/api/admin/finance/payouts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.payouts || [];
+    },
+
+    async reviewPayout(
+      token: string,
+      payoutId: string,
+      status: 'APPROVED' | 'REJECTED' | 'COMPLETED',
+      reference?: string,
+      notes?: string
+    ): Promise<any> {
+      return await apiFetch<any>(`/api/admin/finance/payouts/${payoutId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status, reference, notes }),
+      });
+    },
+
+    // 6. Registro de Auditoría y Ajustes Globales
+    async getAuditLogs(
+      token: string,
+      page = 1,
+      limit = 30,
+      action?: string,
+      entityType?: string
+    ): Promise<any> {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (action) params.append('action', action);
+      if (entityType) params.append('entityType', entityType);
+      return await apiFetch<any>(`/api/admin/audit-logs?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    async getSettings(token: string): Promise<any> {
+      const res = await apiFetch<{ settings: any }>('/api/admin/settings', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.settings || {};
+    },
+
+    async updateSetting(token: string, key: string, value: string, description?: string): Promise<any> {
+      return await apiFetch<any>('/api/admin/settings', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ key, value, description }),
+      });
+    },
+  },
+
+  // ====================================================
+  // 7.1 SERVICIO KYC PARA CLIENTES Y CREADORES
+  // ====================================================
+  kyc: {
+    async submit(
+      token: string,
+      data: {
+        documentType: string;
+        documentNumber: string;
+        fullName: string;
+        birthDate?: string;
+        frontDocumentUrl: string;
+        backDocumentUrl?: string;
+        selfieWithDocUrl: string;
+      }
+    ): Promise<{ status: string; message: string; kyc?: any } | null> {
+      return await apiFetch<any>('/api/kyc/submit', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+    },
+
+    async getMyStatus(
+      token: string
+    ): Promise<{ kycStatus: string; isVerified: boolean; submission: any } | null> {
+      return await apiFetch<any>('/api/kyc/my-status', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+  },
+
+  // ====================================================
+  // 7.2 SERVICIO DE REPORTES Y RECLAMACIONES (DMCA)
+  // ====================================================
+  reports: {
+    async submit(
+      data: {
+        reporterEmail?: string;
+        videoId?: string;
+        targetUserId?: string;
+        reason: string;
+        description: string;
+        evidenceUrl?: string;
+      },
+      token?: string
+    ): Promise<{ status: string; message: string; reportId?: string } | null> {
+      const headers: any = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      return await apiFetch<any>('/api/reports', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      });
+    },
+  },
+
+  // ====================================================
+  // 7.3 RETIROS PARA CREADORES (PAYOUTS)
+  // ====================================================
+  creator: {
+    async requestPayout(
+      token: string,
+      amount: number,
+      bankDetails: string
+    ): Promise<{ status: string; message: string; payout?: any } | null> {
+      return await apiFetch<any>('/api/creator/payout-request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount, bankDetails }),
       });
     },
   },

@@ -29,6 +29,33 @@ export const authenticateJWT = (req: Request, res: Response, next: NextFunction)
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
     req.user = decoded;
+    
+    // Si el usuario es un ID real de base de datos, validar que la cuenta no esté suspendida
+    if (decoded.id && !decoded.id.startsWith('usr_')) {
+      const { PrismaClient } = require('@prisma/client');
+      const prismaInstance = new PrismaClient();
+      prismaInstance.user
+        .findUnique({
+          where: { id: decoded.id },
+          select: { isSuspended: true, suspensionReason: true },
+        })
+        .then((dbUser: any) => {
+          if (dbUser?.isSuspended) {
+            return res.status(403).json({
+              error: `Acceso restringido: Tu cuenta ha sido suspendida por la administración. Motivo: ${
+                dbUser.suspensionReason || 'Violación de los términos y políticas legales de la plataforma'
+              }.`,
+              isSuspended: true,
+            });
+          }
+          next();
+        })
+        .catch(() => {
+          next();
+        });
+      return;
+    }
+
     next();
   } catch (error) {
     return res.status(403).json({ error: 'Token inválido o expirado' });
