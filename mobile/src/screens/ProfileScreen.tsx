@@ -476,12 +476,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onSelectVideo, onO
       return;
     }
 
-    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
+    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP) con precio exacto visible
     const WOMPI_DIRECT_CHECKOUT_URL = 'https://checkout.wompi.co/l/VPOS_4BlRq7';
+    let targetUrl = WOMPI_DIRECT_CHECKOUT_URL;
     try {
-      await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      const linkData = await api.wompi.getCheckoutLink(
+        5000,
+        'actor_studio',
+        `ACTOR-${user?.id?.slice(0, 8) || 'USER'}-${Date.now()}`
+      );
+      if (linkData && linkData.checkoutUrl) {
+        targetUrl = linkData.checkoutUrl;
+      }
+      if (linkData && linkData.reference) {
+        setActorTransactionRef(linkData.reference);
+      }
+    } catch (_) {}
+
+    try {
+      await WebBrowser.openBrowserAsync(targetUrl);
     } catch (_) {
-      Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      Linking.openURL(targetUrl).catch(() => {});
     }
 
     // Mostrar pantalla de espera y confirmación de pago

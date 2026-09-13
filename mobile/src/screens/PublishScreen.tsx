@@ -98,6 +98,22 @@ export const PublishScreen: React.FC = () => {
   ];
   const [allAvailableTags, setAllAvailableTags] = useState<string[]>(DEFAULT_SUGGESTED_TAGS);
 
+  // Cargar hashtags persistidos globales del servidor
+  React.useEffect(() => {
+    let isMounted = true;
+    api.tags.getAll().then((tags) => {
+      if (isMounted && Array.isArray(tags) && tags.length > 0) {
+        setAllAvailableTags((prev) => {
+          const combined = new Set([...DEFAULT_SUGGESTED_TAGS, ...tags, ...prev]);
+          return Array.from(combined);
+        });
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const visibilities = [
     { name: 'Público', icon: Globe },
     { name: 'Solo seguidores', icon: Lock },
@@ -308,11 +324,28 @@ export const PublishScreen: React.FC = () => {
       return;
     }
 
-    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP)
+    // Abrir pasarela de pagos oficial Wompi Bancolombia ($5.000 COP) con precio exacto visible
     try {
-      await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      const linkData = await api.wompi.getCheckoutLink(
+        5000,
+        'actor_studio',
+        `ACTOR-${user?.id?.slice(0, 8) || 'STUDIO'}-${Date.now()}`
+      );
+      const targetUrl = linkData?.checkoutUrl || WOMPI_DIRECT_CHECKOUT_URL;
+      if (linkData?.reference) {
+        setTransactionRef(linkData.reference);
+      }
+      try {
+        await WebBrowser.openBrowserAsync(targetUrl);
+      } catch (_) {
+        Linking.openURL(targetUrl).catch(() => {});
+      }
     } catch (_) {
-      Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      try {
+        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+      } catch (err) {
+        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+      }
     }
 
     // Mostrar pantalla de verificación

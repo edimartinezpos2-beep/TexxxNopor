@@ -222,14 +222,27 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
           ? 'Tarjeta Débito/Crédito'
           : 'Efecty / Baloto';
 
-      // 1. Abrir pasarela oficial Wompi (Link Oficial)
+      // 1. Obtener URL de pasarela oficial Wompi con el precio exacto del plan
+      let targetUrl = WOMPI_DIRECT_CHECKOUT_URL;
       try {
-        await WebBrowser.openBrowserAsync(WOMPI_DIRECT_CHECKOUT_URL);
+        const linkData = await api.wompi.getCheckoutLink(
+          selectedPlanObj.amount,
+          selectedPlanObj.id,
+          `VIP-${user?.id?.slice(0, 8) || 'GUEST'}-${Date.now()}`
+        );
+        if (linkData && linkData.checkoutUrl) {
+          targetUrl = linkData.checkoutUrl;
+        }
+      } catch (_) {}
+
+      // 2. Abrir pasarela oficial Wompi (Link con precio exacto visible)
+      try {
+        await WebBrowser.openBrowserAsync(targetUrl);
       } catch (_) {
-        Linking.openURL(WOMPI_DIRECT_CHECKOUT_URL).catch(() => {});
+        Linking.openURL(targetUrl).catch(() => {});
       }
 
-      // 2. Pasar a pantalla de espera de confirmación de pago (no dar VIP falso)
+      // 3. Pasar a pantalla de espera de confirmación de pago
       setIsWaitingVerification(true);
     } catch (err: any) {
       Alert.alert('Aviso de Pasarela', err.message || 'No se pudo abrir la pasarela de pagos. Intenta de nuevo.');
@@ -394,6 +407,19 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
             <Text style={styles.successSubtitle}>
               Se ha abierto la pasarela oficial de Wompi Bancolombia. Realiza tu transferencia por PSE, Nequi, Bancolombia o Tarjeta.
             </Text>
+
+            {/* Tarjeta Destacada con el Precio Exacto a Pagar */}
+            <View style={{ backgroundColor: '#1A1A24', borderColor: '#30D158', borderWidth: 2, borderRadius: 16, padding: 18, width: '100%', alignItems: 'center', marginBottom: 18 }}>
+              <Text style={{ color: '#8E8E93', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
+                PRECIO TOTAL A PAGAR EN WOMPI
+              </Text>
+              <Text style={{ color: '#30D158', fontSize: 30, fontWeight: '900', letterSpacing: 0.5 }}>
+                {plans.find((p) => p.id === selectedPlan)?.price}
+              </Text>
+              <Text style={{ color: '#D0D0E0', fontSize: 13, marginTop: 4, fontWeight: '600' }}>
+                {plans.find((p) => p.id === selectedPlan)?.name} · Transacción Segura
+              </Text>
+            </View>
 
             <View style={[styles.successReceiptCard, { borderColor: '#FFD700' }]}>
               <View style={styles.voucherHeader}>

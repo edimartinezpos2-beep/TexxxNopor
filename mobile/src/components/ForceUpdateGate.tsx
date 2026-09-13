@@ -54,19 +54,14 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Botón 1: Descargar el APK / última versión
+  // Botón principal: Redireccionar a la página principal para descargar el APK desde la barra superior
   const handleDownloadUpdate = () => {
-    const targetUrl =
-      updateInfo?.updateUrl || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
-    Linking.openURL(targetUrl).catch(() => {
-      Linking.openURL('https://texxxnopor-backend.onrender.com').catch(() => {});
-    });
-  };
-
-  // Botón 2: Redireccionar a la página web principal
-  const handleGoToWeb = () => {
     const webUrl = updateInfo?.webUrl || 'https://texxxnopor-backend.onrender.com';
-    Linking.openURL(webUrl).catch(() => {});
+    Linking.openURL(webUrl).catch(() => {
+      const fallbackUrl =
+        updateInfo?.updateUrl || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+      Linking.openURL(fallbackUrl).catch(() => {});
+    });
   };
 
   const latestVer = updateInfo?.latestVersion || APP_VERSION;
@@ -91,45 +86,29 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
             {/* Badge de Versión Caducada */}
             <View style={styles.badgeRow}>
               <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>VERSIÓN v{APP_VERSION} CADUCADA</Text>
+                <Text style={styles.expiredBadgeText}>NUEVA VERSIÓN POSTERIOR DISPONIBLE</Text>
               </View>
             </View>
 
             <Text style={styles.title}>
-              {updateInfo?.title || 'Actualización Obligatoria Requerida'}
+              {updateInfo?.title || 'Actualización Requerida'}
             </Text>
 
             <Text style={styles.subtitle}>
               {updateInfo?.message ||
-                `Esta versión de la aplicación ha sido desactivada. Para continuar disfrutando del catálogo 4K, historias efímeras y pasarela de pagos debes actualizar a la versión ${latestVer}.`}
+                'Existe una versión posterior disponible de la aplicación. Para continuar disfrutando del catálogo completo y todas las funciones, pulsa Descargar para ir a la página principal e instalar la última versión.'}
             </Text>
 
-            {/* Comparativa de Versiones */}
-            <View style={styles.versionCard}>
-              <View style={styles.versionRow}>
-                <Text style={styles.versionLabel}>Tu versión instalada:</Text>
-                <Text style={[styles.versionValue, { color: '#FF3B30' }]}>v{APP_VERSION} (Descontinuada)</Text>
-              </View>
-              <View style={styles.versionDivider} />
-              <View style={styles.versionRow}>
-                <Text style={styles.versionLabel}>Nueva versión oficial:</Text>
-                <Text style={[styles.versionValue, { color: '#30D158' }]}>
-                  v{latestVer} (Requerida)
-                </Text>
-              </View>
-            </View>
-
             {/* Novedades de la Nueva Versión */}
-            <Text style={styles.notesHeader}>Especificaciones de la actualización:</Text>
+            <Text style={styles.notesHeader}>Novedades de la versión posterior:</Text>
             <View style={styles.notesContainer}>
               {(
                 updateInfo?.releaseNotes || [
-                  'Historias efímeras de 24h con fotos y videos cortos en alta definición',
-                  'Corrección total de fotos de perfil (se suben y muestran tus fotos reales)',
-                  'Recuperación inmediata de contraseña mediante código OTP de 6 dígitos',
-                  'Sesión persistente en móvil y web (no tendrás que iniciar sesión cada vez)',
-                  'Streaming 4K Ultra HD optimizado sin cortes',
-                  'Pasarela de pagos oficial Wompi (Bancolombia, PSE, Nequi y Tarjetas)',
+                  'Streaming de video optimizado en alta definición y sin cortes',
+                  'Reacciones flotantes en vivo en tiempo real iniciando desde cero',
+                  'Filtro dinámico de categorías por hashtags y actores',
+                  'Corrección total de fotos de perfil y persistencia en la nube',
+                  'Descarga e instalación directa del APK oficial',
                 ]
               ).map((note, idx) => (
                 <View key={idx} style={styles.noteItem}>
@@ -139,19 +118,11 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
               ))}
             </View>
 
-            {/* BOTÓN 1: Descargar Actualización */}
+            {/* BOTÓN ÚNICO: Descargar (redirecciona a la página principal para descargar el APK) */}
             <TouchableOpacity style={styles.updateBtn} onPress={handleDownloadUpdate} activeOpacity={0.85}>
               <Download size={20} color="#000000" />
               <Text style={styles.updateBtnText}>
-                Descargar e Instalar v{latestVer}
-              </Text>
-            </TouchableOpacity>
-
-            {/* BOTÓN 2: Redireccionar a la Página Web Principal */}
-            <TouchableOpacity style={styles.webBtn} onPress={handleGoToWeb} activeOpacity={0.85}>
-              <Globe size={18} color="#FFFFFF" />
-              <Text style={styles.webBtnText}>
-                Ir a la Página Web Principal
+                Descargar
               </Text>
             </TouchableOpacity>
 

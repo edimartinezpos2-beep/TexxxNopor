@@ -33,6 +33,8 @@ import {
   RotateCcw,
 } from 'lucide-react-native';
 
+import { API_BASE_URL } from '../services/api';
+
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 
 export interface HLSVideoPlayerProps {
@@ -89,20 +91,27 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const hideControlsTimer = useRef<NodeJS.Timeout | null>(null);
   const feedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Helper para asegurar protocolo seguro HTTPS y URL bien formada
+  // Helper para asegurar protocolo seguro HTTPS y URL bien formada sin romper IPs locales
   const resolveSafeVideoUri = (url?: string, hls?: string): string => {
     let primary = url || hls || '';
     if (!primary || primary.trim() === '') {
       return '';
     }
 
-    // ► Si es una URL relativa del backend (/uploads/...) → anteponer el host de Render
+    // ► Si es una URL relativa del backend (/uploads/... o /api/stream/...) → anteponer API_BASE_URL
     if (primary.startsWith('/')) {
-      primary = `https://texxxnopor-backend.onrender.com${primary}`;
+      primary = `${API_BASE_URL}${primary}`;
     }
 
-    // ► Convertir siempre http:// → https://
-    primary = primary.replace(/^http:\/\//i, 'https://');
+    // Detectar si es una IP local o privada (localhost, 127.0.0.1, 10.0.2.2, 192.168.x.x, 10.x.x.x, etc.)
+    const isLocalHostOrIp = /^(http:\/\/)?(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?/i.test(
+      primary
+    );
+
+    // Solo convertir http:// a https:// si es un dominio público seguro (no puertos locales sin TLS)
+    if (!isLocalHostOrIp) {
+      primary = primary.replace(/^http:\/\//i, 'https://');
+    }
 
     return primary;
   };

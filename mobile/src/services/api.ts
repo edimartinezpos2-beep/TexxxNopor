@@ -1327,6 +1327,45 @@ export const api = {
         return null;
       }
     },
+
+    getDownloadUrl(): string {
+      return `${API_BASE_URL}/api/app/download-apk`;
+    },
+  },
+
+  // ====================================================
+  // 10.1 GESTIÓN GLOBAL DE HASHTAGS Y ETIQUETAS
+  // ====================================================
+  tags: {
+    async getAll(): Promise<string[]> {
+      try {
+        const res = await apiFetch<{ tags: string[] }>('/api/tags');
+        if (res && Array.isArray(res.tags) && res.tags.length > 0) return res.tags;
+        return [
+          '#parati',
+          '#nuevos',
+          '#masvideos',
+          '#amateur',
+          '#pareja',
+          '#hd',
+          '#4k',
+          '#estreno',
+          '#verificado',
+        ];
+      } catch {
+        return [
+          '#parati',
+          '#nuevos',
+          '#masvideos',
+          '#amateur',
+          '#pareja',
+          '#hd',
+          '#4k',
+          '#estreno',
+          '#verificado',
+        ];
+      }
+    },
   },
 
   // ====================================================
@@ -1367,6 +1406,22 @@ export const api = {
     async getStatus(token: string, transactionId: string): Promise<{ status: string; transaction?: any } | null> {
       return await apiFetch<{ status: string; transaction?: any }>(`/api/wompi/status/${transactionId}`, {
         headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+
+    async getCheckoutLink(
+      amount: number,
+      plan: string,
+      reference?: string
+    ): Promise<{ checkoutUrl: string; formattedPrice: string; reference: string; amount: number } | null> {
+      return await apiFetch<{
+        checkoutUrl: string;
+        formattedPrice: string;
+        reference: string;
+        amount: number;
+      }>('/api/wompi/checkout-link', {
+        method: 'POST',
+        body: JSON.stringify({ amount, plan, reference }),
       });
     },
   },

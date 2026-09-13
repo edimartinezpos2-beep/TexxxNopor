@@ -78,6 +78,10 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   const fileSize = stat.size;
   const range = req.headers.range;
 
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+  res.header('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
+
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
@@ -89,6 +93,7 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
       'Content-Type': 'video/mp4',
+      'Access-Control-Allow-Origin': '*',
     };
     res.writeHead(206, head);
     file.pipe(res);
@@ -97,10 +102,21 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
       'Content-Length': fileSize,
       'Content-Type': 'video/mp4',
       'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
     };
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);
   }
+});
+
+// ====================================================
+// RUTAS DIRECTAS DE DESCARGA DE APK INSTALABLE
+// ====================================================
+app.get(['/download', '/api/app/download-apk'], (req: Request, res: Response) => {
+  const downloadUrl =
+    process.env.APP_UPDATE_URL ||
+    'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+  return res.redirect(downloadUrl);
 });
 
 // ====================================================
@@ -2227,6 +2243,99 @@ app.post('/api/wompi/create-transaction', authenticateJWT, async (req: Request, 
   }
 });
 
+// 2.1 Generar Enlace Directo de Checkout Wompi con Precio Exacto Visible
+app.post('/api/wompi/checkout-link', async (req: Request, res: Response) => {
+  try {
+    const { amount, plan, reference: customRef, customerEmail } = req.body;
+    const planAmount = Number(amount) || 15000;
+    const amountInCents = Math.round(planAmount * 100);
+    const reference = customRef || `TX-WOMPI-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const pubKey = WompiService.getPublicKey();
+    const signature = WompiService.generateIntegritySignature(reference, amountInCents, 'COP');
+    const redirectUrl = `https://texxxnopor-backend.onrender.com/api/wompi/redirect-handler`;
+    const checkoutUrl = `https://checkout.wompi.co/p/?public-key=${pubKey}&currency=COP&amount-in-cents=${amountInCents}&reference=${reference}&signature:integrity=${signature}&redirect-url=${encodeURIComponent(redirectUrl)}`;
+
+    return res.json({
+      status: 'success',
+      amount: planAmount,
+      amountInCents,
+      formattedPrice: `$${planAmount.toLocaleString('es-CO')} COP`,
+      reference,
+      checkoutUrl,
+      publicKey: pubKey,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al generar enlace de checkout Wompi' });
+  }
+});
+
+// ====================================================
+// GESTIÓN DE HASHTAGS GLOBALES (GUARDADOS Y SUGERIDOS)
+// ====================================================
+app.get('/api/tags', async (req: Request, res: Response) => {
+  try {
+    const DEFAULT_BASE_TAGS = [
+      '#parati',
+      '#nuevos',
+      '#masvideos',
+      '#amateur',
+      '#pareja',
+      '#hd',
+      '#4k',
+      '#estreno',
+      '#verificado',
+    ];
+
+    const [dbTags, recentVideos] = await Promise.all([
+      prisma.tag.findMany({ select: { name: true } }).catch(() => []),
+      prisma.video.findMany({
+        take: 100,
+        select: { tagsList: true },
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => []),
+    ]);
+
+    const tagSet = new Set<string>(DEFAULT_BASE_TAGS);
+    dbTags.forEach((t) => {
+      if (t.name) {
+        const clean = t.name.startsWith('#') ? t.name.toLowerCase() : `#${t.name.toLowerCase()}`;
+        tagSet.add(clean);
+      }
+    });
+
+    recentVideos.forEach((v) => {
+      if (Array.isArray(v.tagsList)) {
+        v.tagsList.forEach((t: string) => {
+          if (t && typeof t === 'string') {
+            const clean = t.trim().startsWith('#') ? t.trim().toLowerCase() : `#${t.trim().toLowerCase()}`;
+            tagSet.add(clean);
+          }
+        });
+      }
+    });
+
+    return res.json({
+      status: 'success',
+      tags: Array.from(tagSet),
+    });
+  } catch (err: any) {
+    return res.json({
+      status: 'success',
+      tags: [
+        '#parati',
+        '#nuevos',
+        '#masvideos',
+        '#amateur',
+        '#pareja',
+        '#hd',
+        '#4k',
+        '#estreno',
+        '#verificado',
+      ],
+    });
+  }
+});
+
 // 3. Consultar Estado de Transacción Wompi
 app.get('/api/wompi/status/:transactionId', authenticateJWT, async (req: Request, res: Response) => {
   try {
@@ -3973,27 +4082,49 @@ app.delete('/api/stories/:id', authenticateJWT, async (req: Request, res: Respon
 // ====================================================
 // 8. REACCIONES FLOTANTES EN VIVO PARA VIDEOS
 // ====================================================
+const DEFAULT_REACTIONS: Record<string, number> = {
+  '🔥': 0,
+  '💋': 0,
+  '🔞': 0,
+  '✨': 0,
+  '❤️': 0,
+  '💦': 0,
+};
 const videoReactionsStore: Record<string, Record<string, number>> = {};
 
-// Enviar reacción a video en vivo
+// Enviar reacción a video en vivo (Inicia en 0 e incrementa 1 a 1 de forma real)
 app.post('/api/videos/:id/react', async (req: Request, res: Response) => {
   const videoId = req.params.id;
   const { emoji, userId } = req.body;
-  const validEmoji = emoji || '🔥';
+  const validEmoji = (emoji || '🔥').trim();
 
   try {
     if (!videoReactionsStore[videoId]) {
-      videoReactionsStore[videoId] = {
-        '🔥': 145 + Math.floor(Math.random() * 50),
-        '💋': 88 + Math.floor(Math.random() * 30),
-        '🔞': 270 + Math.floor(Math.random() * 60),
-        '✨': 95 + Math.floor(Math.random() * 20),
-        '❤️': 160 + Math.floor(Math.random() * 40),
-        '💦': 120 + Math.floor(Math.random() * 35),
-      };
+      // Consultar conteos existentes en BD o iniciar en 0
+      const existingGroups = await prisma.videoReaction.groupBy({
+        by: ['emoji'],
+        where: { videoId },
+        _count: { emoji: true },
+      }).catch(() => []);
+
+      const initialCounts = { ...DEFAULT_REACTIONS };
+      existingGroups.forEach((g) => {
+        initialCounts[g.emoji] = g._count.emoji;
+      });
+      videoReactionsStore[videoId] = initialCounts;
     }
 
+    // Incrementar en 1 exactamente
     videoReactionsStore[videoId][validEmoji] = (videoReactionsStore[videoId][validEmoji] || 0) + 1;
+
+    // Persistir en PostgreSQL de forma asíncrona
+    prisma.videoReaction.create({
+      data: {
+        videoId,
+        userId: userId || null,
+        emoji: validEmoji,
+      },
+    }).catch(() => {});
 
     // Si viene userId, enviar notificación al creador
     if (userId) {
@@ -4031,24 +4162,37 @@ app.post('/api/videos/:id/react', async (req: Request, res: Response) => {
   }
 });
 
-// Obtener conteo de reacciones de un video
-app.get('/api/videos/:id/reactions', (req: Request, res: Response) => {
+// Obtener conteo de reacciones de un video (Inicia en 0)
+app.get('/api/videos/:id/reactions', async (req: Request, res: Response) => {
   const videoId = req.params.id;
-  if (!videoReactionsStore[videoId]) {
-    videoReactionsStore[videoId] = {
-      '🔥': 145 + Math.floor(Math.random() * 50),
-      '💋': 88 + Math.floor(Math.random() * 30),
-      '🔞': 270 + Math.floor(Math.random() * 60),
-      '✨': 95 + Math.floor(Math.random() * 20),
-      '❤️': 160 + Math.floor(Math.random() * 40),
-      '💦': 120 + Math.floor(Math.random() * 35),
-    };
-  }
 
-  return res.json({
-    status: 'success',
-    reactions: videoReactionsStore[videoId],
-  });
+  try {
+    if (!videoReactionsStore[videoId]) {
+      const existingGroups = await prisma.videoReaction.groupBy({
+        by: ['emoji'],
+        where: { videoId },
+        _count: { emoji: true },
+      }).catch(() => []);
+
+      const counts = { ...DEFAULT_REACTIONS };
+      existingGroups.forEach((g) => {
+        counts[g.emoji] = g._count.emoji;
+      });
+      videoReactionsStore[videoId] = counts;
+    }
+
+    return res.json({
+      status: 'success',
+      videoId,
+      reactions: videoReactionsStore[videoId],
+    });
+  } catch (err: any) {
+    return res.json({
+      status: 'success',
+      videoId,
+      reactions: { ...DEFAULT_REACTIONS },
+    });
+  }
 });
 
 // Crear Video con Categoría y Hashtags
@@ -4184,6 +4328,35 @@ app.post(
           comments: true,
         },
       });
+
+      // Persistir hashtags en la base de datos para sugerencia global
+      if (allTags && allTags.length > 0) {
+        for (const rawTag of allTags) {
+          const cleanTag = rawTag.trim().toLowerCase();
+          if (cleanTag) {
+            try {
+              const tagRecord = await prisma.tag.upsert({
+                where: { name: cleanTag },
+                update: {},
+                create: { name: cleanTag },
+              });
+              await prisma.videoTag.upsert({
+                where: {
+                  videoId_tagId: {
+                    videoId: newVideo.id,
+                    tagId: tagRecord.id,
+                  },
+                },
+                update: {},
+                create: {
+                  videoId: newVideo.id,
+                  tagId: tagRecord.id,
+                },
+              }).catch(() => {});
+            } catch (_) {}
+          }
+        }
+      }
 
       const formatted = formatVideoItem(newVideo, userId);
 

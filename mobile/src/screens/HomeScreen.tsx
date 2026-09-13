@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Modal,
   TextInput,
+  Linking,
 } from 'react-native';
 import {
   Search,
@@ -30,6 +31,8 @@ import {
   ThumbsUp,
   Award,
   Film,
+  Download,
+  Hash,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { api, VideoItem, ActorStoryGroup, ActorItem } from '../services/api';
@@ -96,6 +99,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     { id: '4', name: 'Amateur', icon: User },
     { id: '5', name: 'Pareja', icon: Users },
   ];
+
+  // Hashtags persistidos cargados del servidor
+  const [dynamicTags, setDynamicTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    api.tags.getAll().then((tags) => {
+      if (Array.isArray(tags)) {
+        const filtered = tags
+          .filter((t) => !['#parati', '#nuevos', '#masvideos', '#amateur', '#pareja'].includes(t.toLowerCase()))
+          .slice(0, 10);
+        setDynamicTags(filtered);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleDownloadApk = () => {
+    const downloadUrl =
+      'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+    Linking.openURL(downloadUrl).catch(() => {});
+  };
 
   const loadUnreadNotifs = useCallback(async () => {
     if (!userToken) return;
@@ -216,11 +239,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       if (!isTrans && v.category === 'Trans') return false;
     }
 
-    // 2. Filtro de Categoría
+    // 2. Filtro de Categoría y Hashtags
     let matchesCategory = true;
     if (selectedCategory !== 'Para ti') {
-      const catNorm = selectedCategory.toLowerCase();
+      const catNorm = selectedCategory.toLowerCase().trim();
+      const cleanCatTag = catNorm.startsWith('#') ? catNorm : `#${catNorm}`;
       const vCat = (v.category || '').toLowerCase();
+      const catWords = catNorm.replace(/^#/, '').split(/\s+/).filter((w) => w.length > 2);
 
       if (catNorm === 'más videos' || catNorm === 'más vistos') {
         matchesCategory = true;
@@ -238,9 +263,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           vCat.includes('nuevo') ||
           (v.tags && v.tags.some((t) => t.toLowerCase().includes('nuevo')));
       } else {
-        matchesCategory =
+        const matchesDirect =
           vCat.includes(catNorm) ||
-          (v.tags && v.tags.some((t) => t.toLowerCase().includes(catNorm)));
+          (v.tags &&
+            v.tags.some(
+              (t) =>
+                t.toLowerCase() === cleanCatTag ||
+                t.toLowerCase().includes(catNorm.replace(/\s+/g, ''))
+            ));
+        const matchesKeywords = catWords.some(
+          (word) =>
+            vCat.includes(word) || (v.tags && v.tags.some((t) => t.toLowerCase().includes(word)))
+        );
+        matchesCategory = matchesDirect || matchesKeywords;
       }
     }
 
@@ -499,6 +534,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </TouchableOpacity>
           )}
 
+          {/* Botón Descargar APK (En la barra superior al lado del perfil) */}
+          <TouchableOpacity
+            style={styles.downloadHeaderBtn}
+            onPress={handleDownloadApk}
+            activeOpacity={0.85}
+          >
+            <Download size={13} color="#FFFFFF" />
+            <Text style={styles.downloadHeaderBtnText}>Descargar</Text>
+          </TouchableOpacity>
+
           {/* Avatar de Usuario */}
           <TouchableOpacity
             style={styles.avatarContainer}
@@ -722,6 +767,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </TouchableOpacity>
                     );
                   })}
+
+                  {/* Hashtags dinámicos y creados por actores */}
+                  {dynamicTags.map((tag) => {
+                    const isSelected = selectedCategory === tag;
+                    return (
+                      <TouchableOpacity
+                        key={tag}
+                        style={[
+                          styles.categoryChip,
+                          { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+                          isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                        ]}
+                        onPress={() => setSelectedCategory(tag)}
+                        activeOpacity={0.8}
+                      >
+                        <Hash
+                          size={12}
+                          color={isSelected ? '#FFFFFF' : colors.primary}
+                          style={{ marginRight: 3 }}
+                        />
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            { color: colors.textPrimary },
+                            isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
+                          ]}
+                        >
+                          {tag.replace(/^#/, '')}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
               </View>
             </View>
@@ -808,6 +885,20 @@ const styles = StyleSheet.create({
   },
   searchButtonText: {
     fontSize: 12,
+  },
+  downloadHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2D55',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 5,
+  },
+  downloadHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   notifButton: {
     padding: 8,
