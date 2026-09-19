@@ -594,12 +594,16 @@ const AdminCatalogScreen: React.FC = () => {
 // =========================================================================
 const AdminUsersKycScreen: React.FC = () => {
   const { userToken } = useAuth();
-  const [subTab, setSubTab] = useState<'KYC' | 'USERS'>('KYC');
+  const [subTab, setSubTab] = useState<'KYC' | 'USERS' | 'ACTORS'>('KYC');
   const [loading, setLoading] = useState(true);
 
   // KYC
   const [kycList, setKycList] = useState<KycItem[]>([]);
   const [selectedKycPhoto, setSelectedKycPhoto] = useState<string | null>(null);
+
+  // Verificación de Actores (Seguidores, Horas de Reproducción, Video de Revisión)
+  const [actorRequests, setActorRequests] = useState<any[]>([]);
+  const [selectedReviewVideo, setSelectedReviewVideo] = useState<string | null>(null);
 
   // Usuarios (RBAC)
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -613,14 +617,16 @@ const AdminUsersKycScreen: React.FC = () => {
     if (!userToken) return;
     setLoading(true);
     try {
-      const [kycData, usersData] = await Promise.all([
+      const [kycData, usersData, actorData] = await Promise.all([
         api.admin.getKycSubmissions(userToken),
         api.admin.getUsers(userToken),
+        api.admin.getActorVerificationRequests(userToken),
       ]);
       setKycList(kycData || []);
       setUsers(usersData || []);
+      setActorRequests(actorData || []);
     } catch (err) {
-      console.log('Error loading users/kyc:', err);
+      console.log('Error loading users/kyc/actors:', err);
     } finally {
       setLoading(false);
     }
@@ -629,6 +635,35 @@ const AdminUsersKycScreen: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleReviewActor = async (actorId: string, status: 'APPROVED' | 'REJECTED') => {
+    let reason = '';
+    if (status === 'REJECTED') {
+      reason = 'No cumple aún con el mínimo de seguidores (100) o de horas de reproducción de videos acumuladas (10h)';
+    }
+    Alert.alert(
+      status === 'APPROVED' ? 'Aprobar Verificación de Actor' : 'Rechazar Verificación',
+      `¿Deseas marcar como ${status === 'APPROVED' ? 'APROBADO con insignia verificada' : 'RECHAZADO'} a este creador?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: status === 'APPROVED' ? 'Aprobar Oficial' : 'Rechazar',
+          style: status === 'REJECTED' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              const res = await api.admin.reviewActorVerification(userToken || '', actorId, status, reason);
+              if (res) {
+                Alert.alert('Éxito', res.message);
+                loadData();
+              }
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'No se pudo procesar la verificación');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleReviewKyc = async (kycId: string, status: 'APPROVED' | 'REJECTED') => {
     let reason = '';
@@ -719,7 +754,17 @@ const AdminUsersKycScreen: React.FC = () => {
         >
           <Shield size={14} color={subTab === 'KYC' ? '#000000' : '#8E8E93'} />
           <Text style={[styles.subTabBtnText, subTab === 'KYC' && styles.subTabBtnTextActive]}>
-            Verificación KYC ({kycList.filter((k) => k.status === 'PENDING').length})
+            KYC ({kycList.filter((k) => k.status === 'PENDING').length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.subTabBtn, subTab === 'ACTORS' && styles.subTabBtnActive]}
+          onPress={() => setSubTab('ACTORS')}
+        >
+          <Crown size={14} color={subTab === 'ACTORS' ? '#000000' : '#8E8E93'} />
+          <Text style={[styles.subTabBtnText, subTab === 'ACTORS' && styles.subTabBtnTextActive]}>
+            Verif. Actores ({actorRequests.filter((a) => !a.isVerified).length})
           </Text>
         </TouchableOpacity>
 
@@ -729,13 +774,131 @@ const AdminUsersKycScreen: React.FC = () => {
         >
           <Users size={14} color={subTab === 'USERS' ? '#000000' : '#8E8E93'} />
           <Text style={[styles.subTabBtnText, subTab === 'USERS' && styles.subTabBtnTextActive]}>
-            Usuarios & Roles ({users.length})
+            Usuarios ({users.length})
           </Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.neonLime} style={{ marginTop: 40 }} />
+      ) : subTab === 'ACTORS' ? (
+        /* BANDEJA DE VERIFICACIÓN DE ACTORES (SEGUIDORES, HORAS DE REPRODUCCIÓN, VIDEO REVISIÓN) */
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={styles.headerTitle}>Verificación Oficial de Actores</Text>
+          <Text style={styles.subtitle}>
+            Los nuevos actores NO están verificados automáticamente. Para autorizar la insignia oficial, revisa seguidores mínimos (100), horas totales de reproducción de sus videos (10h) y video de presentación.
+          </Text>
+
+          {actorRequests.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No hay solicitudes de verificación de actores pendientes.</Text>
+            </View>
+          ) : (
+            actorRequests.map((item) => (
+              <View key={item.actorId} style={styles.kycCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    {item.avatarUrl ? (
+                      <Image source={{ uri: item.avatarUrl }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    ) : (
+                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#262626', justifyContent: 'center', alignItems: 'center' }}>
+                        <Crown size={18} color="#FFD700" />
+                      </View>
+                    )}
+                    <View>
+                      <Text style={styles.kycUserName}>{item.stageName}</Text>
+                      <Text style={{ color: '#8E8E93', fontSize: 11 }}>{item.email || item.realName || 'Actor Registrado'}</Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.statusPill,
+                      item.isVerified
+                        ? styles.statusPillReady
+                        : item.isEligible
+                        ? styles.statusPillFlagged
+                        : styles.statusPillRejected,
+                    ]}
+                  >
+                    <Text style={styles.statusPillText}>
+                      {item.isVerified ? 'VERIFICADO ✓' : item.isEligible ? 'APTO PARA APROBAR' : 'EN EVALUACIÓN'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Métricas de Requisitos en Vivo */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 8 }}>
+                  <View style={{ backgroundColor: '#1A1A24', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: item.meetsFollowerThreshold ? '#30D158' : '#3A3A4A' }}>
+                    <Text style={{ color: '#8E8E93', fontSize: 10 }}>Seguidores (Mín. 100)</Text>
+                    <Text style={{ color: item.meetsFollowerThreshold ? '#30D158' : '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>
+                      {item.followersCount} {item.meetsFollowerThreshold ? '✓' : '⚠️'}
+                    </Text>
+                  </View>
+
+                  <View style={{ backgroundColor: '#1A1A24', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: item.meetsWatchHoursThreshold ? '#30D158' : '#3A3A4A' }}>
+                    <Text style={{ color: '#8E8E93', fontSize: 10 }}>Horas Reprod. (Mín. 10h)</Text>
+                    <Text style={{ color: item.meetsWatchHoursThreshold ? '#30D158' : '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>
+                      {item.totalWatchHours} hrs {item.meetsWatchHoursThreshold ? '✓' : '⚠️'}
+                    </Text>
+                  </View>
+
+                  <View style={{ backgroundColor: '#1A1A24', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#3A3A4A' }}>
+                    <Text style={{ color: '#8E8E93', fontSize: 10 }}>Videos Publicados</Text>
+                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>{item.videosCount}</Text>
+                  </View>
+
+                  <View style={{ backgroundColor: '#1A1A24', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#3A3A4A' }}>
+                    <Text style={{ color: '#8E8E93', fontSize: 10 }}>Vistas Totales</Text>
+                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>{item.totalViews}</Text>
+                  </View>
+                </View>
+
+                {/* Video de Presentación / Revisión */}
+                {item.verificationVideoUrl ? (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 45, 85, 0.12)', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FF2D55', marginBottom: 12, gap: 8 }}
+                    onPress={() => setSelectedReviewVideo(item.verificationVideoUrl)}
+                  >
+                    <Film size={16} color="#FF2D55" />
+                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600', flex: 1 }}>
+                      Ver Video de Revisión / Presentación
+                    </Text>
+                    <ArrowUpRight size={14} color="#FF2D55" />
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={{ color: '#777785', fontSize: 11, fontStyle: 'italic', marginBottom: 10 }}>
+                    Sin video de revisión adjunto aún (evaluar por métricas de videos en catálogo).
+                  </Text>
+                )}
+
+                {/* Botones de Aprobación / Rechazo */}
+                {!item.isVerified ? (
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#30D158', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                      onPress={() => handleReviewActor(item.actorId, 'APPROVED')}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>✓ Aprobar Verificación</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#FF3B30', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                      onPress={() => handleReviewActor(item.actorId, 'REJECTED')}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>✕ Rechazar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={{ backgroundColor: 'rgba(48, 209, 88, 0.1)', padding: 8, borderRadius: 6, alignItems: 'center', marginTop: 4 }}>
+                    <Text style={{ color: '#30D158', fontSize: 12, fontWeight: '600' }}>✓ Cuenta Verificada y Activa</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
       ) : subTab === 'KYC' ? (
         /* BANDEJA KYC */
         <ScrollView showsVerticalScrollIndicator={false}>

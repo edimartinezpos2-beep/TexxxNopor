@@ -32,7 +32,7 @@ dotenv.config();
 export const prisma = new PrismaClient();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-texxxnopor-key';
 
 export const GOOGLE_CLIENT_ID =
@@ -505,7 +505,7 @@ async function ensureCreatorProfileAndActor(userId: string, username: string, av
         bannerUrl:
           'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=1200&auto=format&fit=crop',
         nationality: 'Colombia',
-        isVerified: true,
+        isVerified: false,
       },
     });
   } else if (!actor.userId) {
@@ -594,6 +594,8 @@ function formatVideoItem(v: any, currentUserId?: string, userFavorites?: Set<str
     hlsMasterUrl: sanitizeVideoUrl(v.hlsMasterUrl || v.videoUrl),
     category: v.category?.name || 'Para ti',
     tags: v.tagsList || [],
+    isShort: Boolean(v.isShort || (v.durationSeconds && v.durationSeconds <= 60)),
+    aspectRatio: v.aspectRatio || (v.isShort ? '9:16' : '16:9'),
     isNew: Date.now() - new Date(v.createdAt).getTime() < 3 * 24 * 60 * 60 * 1000,
     actorId: v.actor?.id || undefined,
     actorName: v.actor?.stageName || 'Actor Principal',
@@ -1381,6 +1383,70 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 });
 
+// ⚡ INICIO DE SESIÓN DIRECTO / DEMO USUARIO ANÓNIMO VIP (CON TODAS LAS SUSCRIPCIONES ACTIVAS)
+app.post('/api/auth/demo-vip', async (req: Request, res: Response) => {
+  try {
+    const demoEmail = 'anonimo@texxxnopor.com';
+    let user = await prisma.user.findUnique({
+      where: { email: demoEmail },
+    });
+
+    if (!user) {
+      const passwordHash = await bcrypt.hash('TexxxVip2026!', 10);
+      user = await prisma.user.create({
+        data: {
+          email: demoEmail,
+          username: 'anonimo_vip',
+          passwordHash,
+          role: 'CONSUMER',
+          isVip: true,
+          isVerified: true,
+          vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+          subscriptionPlan: 'VIP_PLATINUM_FULL',
+          avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop',
+          age: 24,
+        },
+      });
+    } else if (!user.isVip || !user.subscriptionPlan) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isVip: true,
+          isVerified: true,
+          vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+          subscriptionPlan: 'VIP_PLATINUM_FULL',
+        },
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        isVip: true,
+        isVerified: true,
+        subscriptionPlan: user.subscriptionPlan,
+        vipExpiresAt: user.vipExpiresAt,
+        avatarUrl: user.avatarUrl,
+        age: user.age || 24,
+      },
+      message: 'Sesión iniciada con éxito como Usuario Anónimo VIP con todas las suscripciones activas',
+    });
+  } catch (err: any) {
+    console.error('Error in demo VIP login:', err);
+    return res.status(500).json({ error: 'Error al iniciar sesión anónima VIP' });
+  }
+});
+
 app.get('/api/auth/me', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user?.id } });
@@ -2005,7 +2071,7 @@ app.post('/api/user/upgrade-to-actor', authenticateJWT, async (req: Request, res
       where: { id: userId },
       data: {
         role: 'CREATOR',
-        isVerified: true,
+        isVerified: false,
       },
     });
 
@@ -2412,6 +2478,70 @@ app.get('/api/tags', async (req: Request, res: Response) => {
         '#verificado',
       ],
     });
+  }
+});
+
+// GET /api/tags/popular: Agrupación y conteo real de videos por hashtag en la base de datos
+app.get('/api/tags/popular', async (req: Request, res: Response) => {
+  try {
+    const allVideos = await prisma.video.findMany({
+      where: { status: 'READY' },
+      select: { tagsList: true },
+    });
+
+    const tagCounts: Record<string, number> = {
+      '#parati': 0,
+      '#nuevos': 0,
+      '#masvideos': 0,
+      '#amateur': 0,
+      '#pareja': 0,
+      '#hd': 0,
+      '#4k': 0,
+      '#estreno': 0,
+    };
+
+    allVideos.forEach((v) => {
+      if (Array.isArray(v.tagsList)) {
+        v.tagsList.forEach((t: string) => {
+          if (t && typeof t === 'string') {
+            const clean = t.trim().startsWith('#') ? t.trim().toLowerCase() : `#${t.trim().toLowerCase()}`;
+            tagCounts[clean] = (tagCounts[clean] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    // Imágenes temáticas de fondo para las tarjetas visuales
+    const tagImages: Record<string, string> = {
+      '#parati': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+      '#amateur': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
+      '#pareja': 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop',
+      '#hd': 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop',
+      '#4k': 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop',
+      '#nuevos': 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop',
+      '#masvideos': 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop',
+      '#estreno': 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop',
+    };
+
+    const popularTags = Object.entries(tagCounts)
+      .map(([name, count], index) => ({
+        id: `pop-tag-${index + 1}`,
+        name,
+        count,
+        countFormatted: count === 1 ? '1 video' : `${count} videos`,
+        badge: count >= 4 ? 'HOT' : count >= 2 ? 'POPULAR' : undefined,
+        imageUrl: tagImages[name] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return res.json({
+      status: 'success',
+      totalVideosEvaluated: allVideos.length,
+      tags: popularTags,
+    });
+  } catch (err: any) {
+    console.error('Error fetching popular tags:', err);
+    return res.status(500).json({ error: 'Error al consultar tags populares' });
   }
 });
 
@@ -3832,11 +3962,20 @@ app.get('/api/videos', async (req: Request, res: Response) => {
   const categoryFilter = req.query.category as string | undefined;
   const searchFilter = req.query.q as string | undefined;
   const tagFilter = req.query.tag as string | undefined;
+  const isShortFilter = req.query.isShort as string | undefined;
 
   try {
     let whereClause: any = {
       status: 'READY',
     };
+
+    // Filtrar por Shorts (relación de aspecto vertical o duración <= 60 seg)
+    if (isShortFilter === 'true') {
+      whereClause.OR = [
+        { isShort: true },
+        { durationSeconds: { lte: 60 } },
+      ];
+    }
 
     // Filtrar por Categoría específica si no es 'Para ti' o 'Todos'
     if (
@@ -4395,7 +4534,12 @@ app.post(
       tags,
       actorId,
       isFollowersOnly,
+      isShort,
+      aspectRatio,
     } = req.body;
+
+    const isShortBool = isShort === true || isShort === 'true' || (Number(durationSeconds) > 0 && Number(durationSeconds) <= 60);
+    const finalAspectRatio = aspectRatio || (isShortBool ? '9:16' : '16:9');
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'El título del video es obligatorio' });
@@ -4514,6 +4658,8 @@ app.post(
           categoryId: categoryRecord?.id || undefined,
           tagsList: allTags,
           isFollowersOnly: Boolean(isFollowersOnly),
+          isShort: isShortBool,
+          aspectRatio: finalAspectRatio,
         },
         include: {
           actor: true,
@@ -5274,6 +5420,132 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   return res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
 });
 
+// ====================================================
+// TRANSMISIONES EN VIVO REALES (EXCLUSIVO ACTORES)
+// ====================================================
+interface ActiveLiveStream {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorAvatar: string;
+  title: string;
+  category: string;
+  viewersCount: number;
+  likesCount: number;
+  streamUrl: string;
+  startedAt: string;
+}
+
+const activeLiveStreams: Map<string, ActiveLiveStream> = new Map();
+
+app.get('/api/live/active', (req: Request, res: Response) => {
+  return res.json({
+    status: 'success',
+    count: activeLiveStreams.size,
+    streams: Array.from(activeLiveStreams.values()),
+  });
+});
+
+app.post('/api/live/start', authenticateJWT, requireRole(UserRole.CREATOR, UserRole.ADMIN), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { title, category } = req.body;
+    
+    let actor = await prisma.actor.findFirst({
+      where: { userId },
+    });
+
+    if (!actor) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const stageName = user?.username || 'Actor';
+      actor = await prisma.actor.create({
+        data: {
+          userId,
+          name: stageName,
+          stageName,
+          avatarUrl: user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+          isVerified: false,
+        },
+      });
+    }
+
+    const liveId = `live_${actor.id}_${Date.now()}`;
+    const liveStream: ActiveLiveStream = {
+      id: liveId,
+      actorId: actor.id,
+      actorName: actor.stageName || actor.name,
+      actorAvatar: actor.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+      title: title?.trim() || `Transmisión En Vivo de ${actor.stageName}`,
+      category: category || 'Para ti',
+      viewersCount: Math.floor(1 + Math.random() * 5),
+      likesCount: 0,
+      streamUrl: `https://live.texxxnopor.com/stream/${liveId}.m3u8`,
+      startedAt: new Date().toISOString(),
+    };
+
+    activeLiveStreams.set(actor.id, liveStream);
+
+    return res.json({
+      status: 'success',
+      message: 'Transmisión en vivo iniciada con éxito',
+      stream: liveStream,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al iniciar transmisión en vivo' });
+  }
+});
+
+app.post('/api/live/stop', authenticateJWT, requireRole(UserRole.CREATOR, UserRole.ADMIN), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const actor = await prisma.actor.findFirst({ where: { userId } });
+    if (actor && activeLiveStreams.has(actor.id)) {
+      activeLiveStreams.delete(actor.id);
+    }
+    return res.json({ status: 'success', message: 'Transmisión en vivo finalizada' });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al finalizar transmisión en vivo' });
+  }
+});
+
+async function ensureDemoVipUser() {
+  try {
+    const demoEmail = 'anonimo@texxxnopor.com';
+    let user = await prisma.user.findUnique({ where: { email: demoEmail } });
+    const passwordHash = await bcrypt.hash('TexxxVip2026!', 10);
+    if (!user) {
+      await prisma.user.create({
+        data: {
+          email: demoEmail,
+          username: 'anonimo_vip',
+          passwordHash,
+          role: 'CONSUMER',
+          isVip: true,
+          isVerified: true,
+          vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+          subscriptionPlan: 'VIP_PLATINUM_FULL',
+          avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop',
+          age: 24,
+        },
+      });
+      console.log('✅ Usuario anónimo VIP creado con éxito: anonimo@texxxnopor.com');
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isVip: true,
+          isVerified: true,
+          vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+          subscriptionPlan: 'VIP_PLATINUM_FULL',
+        },
+      });
+      console.log('✅ Usuario anónimo VIP verificado y activo: anonimo@texxxnopor.com');
+    }
+  } catch (err: any) {
+    console.warn('Nota creando usuario demo VIP:', err.message);
+  }
+}
+
 async function autoSyncDatabase() {
   try {
     console.log('🔄 Sincronizando esquema de base de datos PostgreSQL con Prisma...');
@@ -5298,6 +5570,7 @@ if (require.main === module) {
 
     // Sincronización automática de tablas en Render / PostgreSQL
     await autoSyncDatabase();
+    await ensureDemoVipUser();
   });
 }
 

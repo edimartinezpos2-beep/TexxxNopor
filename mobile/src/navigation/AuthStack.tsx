@@ -211,6 +211,25 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
     }
   };
 
+  // Inicio rápido con cuenta anónima VIP y todas las suscripciones activas
+  const handleLoginDemoVip = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const res = await api.auth.loginDemoVip();
+      if (res && res.token) {
+        await signIn(res.token, res.user);
+        if (onClose) onClose();
+      } else {
+        setErrorMessage('No se pudo iniciar sesión con la cuenta VIP anónima.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error al iniciar sesión anónima VIP.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 1. Solicitar código de recuperación
   const handleRequestResetCode = async () => {
     setErrorMessage('');
@@ -700,6 +719,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
                 </>
               )}
             </TouchableOpacity>
+
+            {/* Botón 1-Tap Usuario Anónimo VIP */}
+            <TouchableOpacity
+              style={styles.demoVipButton}
+              onPress={handleLoginDemoVip}
+              disabled={isLoading}
+              activeOpacity={0.85}
+            >
+              <View style={styles.demoVipCrown}>
+                <Crown size={18} color="#000000" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.demoVipButtonText}>
+                  ⚡ Ingresar como Usuario Anónimo VIP
+                </Text>
+                <Text style={styles.demoVipButtonSubtext}>
+                  Acceso Platinum sin registro · Todas las suscripciones activas
+                </Text>
+              </View>
+              <ArrowRight size={16} color="#FFD700" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1121,5 +1161,35 @@ const styles = StyleSheet.create({
   securityText: {
     color: '#666670',
     fontSize: 11,
+  },
+  demoVipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.08)',
+    borderWidth: 1.5,
+    borderColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 14,
+    gap: 12,
+  },
+  demoVipCrown: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  demoVipButtonText: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  demoVipButtonSubtext: {
+    color: '#B0B0C0',
+    fontSize: 11,
+    marginTop: 2,
   },
 });

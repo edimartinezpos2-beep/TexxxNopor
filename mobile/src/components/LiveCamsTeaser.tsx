@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,62 +13,34 @@ import {
 import { Radio, Users, Eye, Play, X, Send, Heart, Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
-interface LiveModel {
-  id: string;
-  name: string;
-  avatarUrl: string;
-  streamThumbnail: string;
-  viewers: number;
-  tag: string;
-  goalText: string;
-  goalPercent: number;
-}
+import { api } from '../services/api';
+import { LiveStreamItem } from '../types/auth';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 export const LiveCamsTeaser: React.FC = () => {
   const { colors } = useTheme();
-  const [activeStream, setActiveStream] = useState<LiveModel | null>(null);
+  const [activeStreams, setActiveStreams] = useState<LiveStreamItem[]>([]);
+  const [activeStream, setActiveStream] = useState<LiveStreamItem | null>(null);
   const [chatMessage, setChatMessage] = useState('');
-  const [streamLikes, setStreamLikes] = useState(124);
-  const [chatMessages, setChatMessages] = useState<{ id: string; user: string; text: string }[]>([
-    { id: '1', user: 'Alex_99', text: '¡Hola hermosa! Saludos desde Madrid 🔥' },
-    { id: '2', user: 'Carlos_VIP', text: 'Bailas increíble hoy 👏' },
-    { id: '3', user: 'Marco88', text: '¡Falta poco para la meta privada!' },
-  ]);
+  const [streamLikes, setStreamLikes] = useState(12);
+  const [chatMessages, setChatMessages] = useState<{ id: string; user: string; text: string }[]>([]);
 
-  const liveModels: LiveModel[] = [
-    {
-      id: 'live-1',
-      name: 'Valery_Hot',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop',
-      streamThumbnail: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop',
-      viewers: 2840,
-      tag: 'LATINA',
-      goalText: 'Meta: Show Especial en Tanga',
-      goalPercent: 78,
-    },
-    {
-      id: 'live-2',
-      name: 'Scarlett_VIP',
-      avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&auto=format&fit=crop',
-      streamThumbnail: 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=600&auto=format&fit=crop',
-      viewers: 1950,
-      tag: 'COSPLAY',
-      goalText: 'Meta: Baile en Bikini',
-      goalPercent: 92,
-    },
-    {
-      id: 'live-3',
-      name: 'Camila_Sweet',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300&auto=format&fit=crop',
-      streamThumbnail: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop',
-      viewers: 1420,
-      tag: 'AMATEUR',
-      goalText: 'Meta: Juguete a Control Remoto',
-      goalPercent: 65,
-    },
-  ];
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLives = async () => {
+      try {
+        const lives = await api.live.getActive();
+        if (isMounted) setActiveStreams(lives || []);
+      } catch (_) {}
+    };
+    fetchLives();
+    const interval = setInterval(fetchLives, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleSendChat = () => {
     if (!chatMessage.trim()) return;
@@ -78,6 +50,11 @@ export const LiveCamsTeaser: React.FC = () => {
     ]);
     setChatMessage('');
   };
+
+  // Si no hay actores transmitiendo en vivo actualmente, no mostramos modelos simuladas
+  if (!activeStreams || activeStreams.length === 0) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -110,7 +87,7 @@ export const LiveCamsTeaser: React.FC = () => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollList}
       >
-        {liveModels.map((item) => (
+        {activeStreams.map((item) => (
           <TouchableOpacity
             key={item.id}
             activeOpacity={0.9}
@@ -123,7 +100,7 @@ export const LiveCamsTeaser: React.FC = () => {
             {/* Imagen del Stream */}
             <View style={styles.thumbnailContainer}>
               <Image
-                source={{ uri: item.streamThumbnail }}
+                source={{ uri: item.actorAvatar }}
                 style={styles.thumbnail as any}
                 resizeMode="cover"
               />
@@ -136,7 +113,7 @@ export const LiveCamsTeaser: React.FC = () => {
                 </View>
                 <View style={styles.viewersPill}>
                   <Eye size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
-                  <Text style={styles.viewersText}>{(item.viewers / 1000).toFixed(1)}k</Text>
+                  <Text style={styles.viewersText}>{item.viewersCount}</Text>
                 </View>
               </View>
 
@@ -144,23 +121,18 @@ export const LiveCamsTeaser: React.FC = () => {
               <View style={styles.centerPlay}>
                 <Play size={18} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
               </View>
-
-              {/* Barra de progreso de meta */}
-              <View style={styles.goalBarWrapper}>
-                <View style={[styles.goalBarFill, { width: `${item.goalPercent}%` }]} />
-              </View>
             </View>
 
             {/* Info del Stream */}
             <View style={styles.infoContainer}>
               <View style={styles.modelHeader}>
-                <Image source={{ uri: item.avatarUrl }} style={styles.modelAvatar as any} />
+                <Image source={{ uri: item.actorAvatar }} style={styles.modelAvatar as any} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.modelName, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {item.name}
+                    {item.actorName}
                   </Text>
                   <Text style={[styles.goalText, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {item.goalText} ({item.goalPercent}%)
+                    {item.title}
                   </Text>
                 </View>
               </View>
@@ -171,7 +143,7 @@ export const LiveCamsTeaser: React.FC = () => {
                 onPress={() => setActiveStream(item)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.enterRoomBtnText}>ENTRAR A SALA GRATIS</Text>
+                <Text style={styles.enterRoomBtnText}>VER TRANSMISIÓN EN VIVO</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -189,12 +161,12 @@ export const LiveCamsTeaser: React.FC = () => {
             {/* Header del Stream */}
             <View style={styles.modalHeader}>
               <View style={styles.modalStreamerRow}>
-                <Image source={{ uri: activeStream.avatarUrl }} style={styles.modalAvatar as any} />
+                <Image source={{ uri: activeStream.actorAvatar }} style={styles.modalAvatar as any} />
                 <View>
-                  <Text style={styles.modalStreamerName}>{activeStream.name}</Text>
+                  <Text style={styles.modalStreamerName}>{activeStream.actorName}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={styles.modalLiveDot} />
-                    <Text style={styles.modalLiveText}>EN VIVO • {activeStream.viewers} espectadores</Text>
+                    <Text style={styles.modalLiveText}>EN VIVO • {activeStream.viewersCount} espectadores</Text>
                   </View>
                 </View>
               </View>

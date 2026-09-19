@@ -38,6 +38,8 @@ import {
   X,
   Banknote,
   Crown,
+  Radio,
+  Search,
 } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { api } from '../services/api';
@@ -46,12 +48,26 @@ import * as ImagePicker from 'expo-image-picker';
 
 export const PublishScreen: React.FC = () => {
   const { userToken, user, updateUser } = useAuth();
+  const [publishMode, setPublishMode] = useState<'VIDEO' | 'LIVE'>('VIDEO');
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Para ti');
   const [selectedTags, setSelectedTags] = useState<string[]>(['#parati', '#hd']);
   const [customTagInput, setCustomTagInput] = useState('');
   const [selectedVisibility, setSelectedVisibility] = useState('Público');
+
+  // Relación de Aspecto y Formato Short vs Completo
+  const [isShort, setIsShort] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+
+  // Transmisión en vivo oficial para actores
+  const [liveTitle, setLiveTitle] = useState('');
+  const [liveCategory, setLiveCategory] = useState('Para ti');
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [liveStreamData, setLiveStreamData] = useState<any>(null);
+  const [isStartingLive, setIsStartingLive] = useState(false);
+  const [isStoppingLive, setIsStoppingLive] = useState(false);
 
   // Modal para convertirse en actor ($5.000 COP)
   const [showBecomeActorModal, setShowBecomeActorModal] = useState(false);
@@ -136,10 +152,19 @@ export const PublishScreen: React.FC = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        const durationSec = asset.duration ? Math.round(asset.duration / 1000) : undefined;
+        const width = asset.width || 1920;
+        const height = asset.height || 1080;
+        const isVertical = width < height;
+        const detectedIsShort = isVertical || (durationSec !== undefined && durationSec <= 60);
+
+        setIsShort(detectedIsShort);
+        setAspectRatio(isVertical ? '9:16' : '16:9');
+
         setSelectedVideo({
           uri: asset.uri,
           name: asset.fileName || 'video.mp4',
-          duration: asset.duration ? Math.round(asset.duration / 1000) : undefined,
+          duration: durationSec,
         });
 
         // Autocompletar título si está vacío
@@ -259,7 +284,6 @@ export const PublishScreen: React.FC = () => {
       }
 
       // 2. Subir miniatura MANUAL si el usuario eligió una (sobreescribe la automática)
-
       if (selectedThumbnail) {
         setUploadStatus('Subiendo miniatura personalizada...');
         const thumbRes = await api.cloudinary.uploadImageFile(
@@ -272,7 +296,7 @@ export const PublishScreen: React.FC = () => {
         }
       }
 
-      // 3. Registrar video en base de datos PostgreSQL
+      // 3. Registrar video en base de datos PostgreSQL con isShort y aspectRatio
       setUploadStatus('Guardando en catálogo...');
       await api.videos.uploadVideo(userToken || 'token_demo', {
         title: title.trim(),
@@ -285,6 +309,8 @@ export const PublishScreen: React.FC = () => {
         cloudinaryPublicId: uploadedVideoPublicId,
         thumbnailUrl: uploadedThumbUrl,
         thumbnailPublicId: uploadedThumbPublicId,
+        isShort,
+        aspectRatio,
       });
 
       setPublishSuccess(true);
@@ -293,6 +319,8 @@ export const PublishScreen: React.FC = () => {
       setSelectedVideo(null);
       setSelectedThumbnail(null);
       setSelectedTags(['#parati', '#hd']);
+      setIsShort(false);
+      setAspectRatio('16:9');
       setTimeout(() => setPublishSuccess(false), 5000);
     } catch (err: any) {
       console.warn('[PublishScreen] Fallo controlado al publicar:', err.message);
@@ -315,6 +343,51 @@ export const PublishScreen: React.FC = () => {
     } finally {
       setIsPublishing(false);
       setUploadStatus('');
+    }
+  };
+
+  // Transmisión en vivo oficial para actores
+  const handleStartLive = async () => {
+    if (!userToken) {
+      Alert.alert('Sesión Requerida', 'Debes iniciar sesión para transmitir en vivo.');
+      return;
+    }
+    if (user?.role === 'CONSUMER') {
+      setShowBecomeActorModal(true);
+      return;
+    }
+    setIsStartingLive(true);
+    try {
+      const stream = await api.live.start(userToken, {
+        title: liveTitle.trim() || `Transmisión oficial de ${user?.stageName || user?.username || 'Actor'}`,
+        category: liveCategory,
+      });
+      setLiveStreamData(stream);
+      setIsLiveActive(true);
+      Alert.alert('🔴 ¡En Vivo!', 'Tu transmisión oficial ya está activa en TexxxNopor.');
+    } catch (err: any) {
+      Alert.alert('Error al iniciar live', err.message || 'No se pudo iniciar el live.');
+    } finally {
+      setIsStartingLive(false);
+    }
+  };
+
+  const handleStopLive = async () => {
+    if (!userToken || !liveStreamData?.id) {
+      setIsLiveActive(false);
+      setLiveStreamData(null);
+      return;
+    }
+    setIsStoppingLive(true);
+    try {
+      await api.live.stop(userToken, liveStreamData.id);
+      setIsLiveActive(false);
+      setLiveStreamData(null);
+      Alert.alert('Transmisión Finalizada', 'Tu live ha concluido exitosamente.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo detener la transmisión.');
+    } finally {
+      setIsStoppingLive(false);
     }
   };
 
@@ -568,6 +641,31 @@ export const PublishScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Selector de Modo: Subir Video / Short vs Transmitir en Vivo */}
+      <View style={styles.modeTabs}>
+        <TouchableOpacity
+          style={[styles.modeTab, publishMode === 'VIDEO' && styles.modeTabActive]}
+          onPress={() => setPublishMode('VIDEO')}
+          activeOpacity={0.8}
+        >
+          <VideoIcon size={16} color={publishMode === 'VIDEO' ? '#000000' : '#FFFFFF'} style={{ marginRight: 6 }} />
+          <Text style={[styles.modeTabText, publishMode === 'VIDEO' && styles.modeTabTextActive]}>
+            Subir Video / Short
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.modeTab, publishMode === 'LIVE' && styles.modeTabLiveActive]}
+          onPress={() => setPublishMode('LIVE')}
+          activeOpacity={0.8}
+        >
+          <Radio size={16} color={publishMode === 'LIVE' ? '#FFFFFF' : '#FF2D55'} style={{ marginRight: 6 }} />
+          <Text style={[styles.modeTabText, publishMode === 'LIVE' && styles.modeTabTextLiveActive]}>
+            🔴 Transmitir en Vivo
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Banner de éxito al publicar */}
         {publishSuccess && (
@@ -579,314 +677,480 @@ export const PublishScreen: React.FC = () => {
           </View>
         )}
 
-        {/* 2. Hero Card: Selección de Video y Miniatura */}
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Publica con control y verificación</Text>
-
-          <View style={styles.heroRow}>
-            <View style={styles.checklist}>
-              <View style={styles.checkItem}>
-                <ShieldCheck size={16} color="#FFFFFF" />
-                <Text style={styles.checkText}>Consentimiento obligatorio</Text>
-              </View>
-
-              <View style={styles.checkItem}>
-                <View style={styles.ageIcon}>
-                  <Text style={styles.ageIconText}>18+</Text>
+        {publishMode === 'LIVE' ? (
+          /* ==================================================== */
+          /* MODO TRANSMISIÓN EN VIVO OFICIAL DE ACTORES         */
+          /* ==================================================== */
+          <View style={styles.liveContainer}>
+            <View style={styles.liveHeaderCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.liveBadgeIcon}>
+                  <Radio size={22} color="#FF2D55" />
                 </View>
-                <Text style={styles.checkText}>Solo mayores de edad</Text>
-              </View>
-
-              <View style={styles.checkItem}>
-                <Flag size={16} color="#FFFFFF" />
-                <Text style={styles.checkText}>Puede ser reportado</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.liveStudioTitle}>Estudio de Transmisión Oficial</Text>
+                  <Text style={styles.liveStudioSubtitle}>
+                    Solo actores y creadores verificados pueden transmitir en vivo cuando ellos deseen.
+                  </Text>
+                </View>
               </View>
             </View>
 
-            {/* Preview de Miniatura si se seleccionó o fotograma de video */}
-            {selectedThumbnail ? (
-              <View style={{ position: 'relative' }}>
-                <Image source={{ uri: selectedThumbnail.uri }} style={styles.heroImage} />
+            {isLiveActive ? (
+              <View style={styles.liveActiveCard}>
+                <View style={styles.liveActiveBadgeRow}>
+                  <View style={styles.livePill}>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.livePillText}>EN VIVO OFICIAL</Text>
+                  </View>
+                  <View style={styles.viewerBadge}>
+                    <Eye size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.viewerCountText}>{liveStreamData?.viewersCount || 1} espectadores</Text>
+                  </View>
+                </View>
+
+                <View style={styles.broadcastPreview}>
+                  <Radio size={46} color="#FF2D55" style={{ marginBottom: 12 }} />
+                  <Text style={styles.broadcastTitle}>{liveStreamData?.title || liveTitle || 'Transmisión Oficial'}</Text>
+                  <Text style={styles.broadcastMeta}>Categoría: {liveCategory} · Actor: {user?.stageName || user?.username}</Text>
+                  <Text style={styles.broadcastHint}>
+                    Tu stream está en emisión directa. Toda la comunidad de TexxxNopor puede verte en tiempo real.
+                  </Text>
+                </View>
+
                 <TouchableOpacity
-                  style={styles.removeThumbBtn}
-                  onPress={() => setSelectedThumbnail(null)}
+                  style={styles.stopLiveBtn}
+                  onPress={handleStopLive}
+                  disabled={isStoppingLive}
+                  activeOpacity={0.85}
                 >
-                  <X size={12} color="#FFFFFF" />
+                  {isStoppingLive ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.stopLiveBtnText}>⏹ Finalizar Transmisión</Text>
+                  )}
                 </TouchableOpacity>
               </View>
-            ) : selectedVideo ? (
-              <View style={[styles.heroImage, styles.videoPreviewPlaceholder]}>
-                <VideoIcon size={24} color={COLORS.neonLime} />
-                <Text style={styles.videoFrameLabel}>Fotograma de Video</Text>
-              </View>
             ) : (
-              <View style={[styles.heroImage, styles.videoPreviewPlaceholder]}>
-                <Film size={24} color="#555562" />
-                <Text style={styles.videoFrameLabel}>Sin video</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Botón Seleccionar Video */}
-          <TouchableOpacity
-            style={[styles.selectVideoBtn, selectedVideo && styles.selectVideoBtnActive]}
-            onPress={handlePickVideo}
-            activeOpacity={0.85}
-          >
-            {selectedVideo ? (
-              <Check size={18} color="#000000" style={{ marginRight: 6 }} />
-            ) : (
-              <UploadCloud size={20} color="#000000" style={{ marginRight: 6 }} />
-            )}
-            <Text style={styles.selectVideoBtnText}>
-              {selectedVideo ? `Video Seleccionado ✓` : 'Seleccionar Video MP4/MOV'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Botón Seleccionar Miniatura OPCIONAL */}
-          <TouchableOpacity
-            style={styles.selectThumbBtn}
-            onPress={handlePickThumbnail}
-            activeOpacity={0.85}
-          >
-            <ImageIcon size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.selectThumbBtnText}>
-              {selectedThumbnail ? 'Miniatura personalizada ✓' : 'Agregar Miniatura Personalizada (Opcional)'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.formatHint}>
-            Formatos soportados: MP4, MOV · Si no eliges miniatura, se extraerá una parte del video automáticamente
-          </Text>
-        </View>
-
-        {/* 3. Inputs de Formulario */}
-        <View style={styles.inputCard}>
-          <View style={styles.inputHeader}>
-            <Text style={styles.inputLabel}>Título del video *</Text>
-            <Text style={styles.charCounter}>{title.length}/100</Text>
-          </View>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Ej. Sesión Nocturna 4K Ultra HD"
-            placeholderTextColor="#777"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={100}
-          />
-        </View>
-
-        <View style={[styles.inputCard, { marginTop: 12 }]}>
-          <View style={styles.inputHeader}>
-            <Text style={styles.inputLabel}>Describe tu publicación...</Text>
-            <Text style={styles.charCounter}>{description.length}/500</Text>
-          </View>
-          <TextInput
-            style={[styles.textInput, { height: 70 }]}
-            placeholder="Añade detalles, créditos o hashtags adicionales (#amateur #hd)..."
-            placeholderTextColor="#777"
-            value={description}
-            onChangeText={setDescription}
-            maxLength={500}
-            multiline
-          />
-        </View>
-
-        {/* 4. Selector de Categoría (Para posicionar en búsquedas) */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Categoría de Posicionamiento</Text>
-          <Text style={styles.sectionHint}>Define en qué sección aparecerá</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-          {categories.map((cat) => {
-            const isSelected = selectedCategory === cat.name;
-            const IconComp = cat.icon;
-            return (
-              <TouchableOpacity
-                key={cat.name}
-                style={[styles.selectorChip, isSelected && styles.selectorChipSelected]}
-                onPress={() => setSelectedCategory(cat.name)}
-                activeOpacity={0.8}
-              >
-                <IconComp
-                  size={15}
-                  color={isSelected ? '#000000' : '#FFFFFF'}
-                  style={{ marginRight: 6 }}
+              <View style={styles.liveSetupCard}>
+                <Text style={styles.inputLabel}>Título de tu transmisión en vivo *</Text>
+                <TextInput
+                  style={[styles.textInput, { backgroundColor: '#1C1C24', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#2C2C38', marginTop: 6, marginBottom: 14 }]}
+                  placeholder="Ej. Sesión en vivo con seguidores VIP..."
+                  placeholderTextColor="#777"
+                  value={liveTitle}
+                  onChangeText={setLiveTitle}
                 />
-                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
 
-        {/* 5. Selector de Hashtags / Tags para búsquedas */}
-        <View style={[styles.sectionHeaderRow, { marginTop: 14 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Hash size={16} color={COLORS.neonLime} />
-            <Text style={styles.sectionLabel}>Hashtags para Búsquedas</Text>
-          </View>
-          <Text style={styles.sectionHint}>Selecciona o escribe tags</Text>
-        </View>
+                <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>Categoría del Live</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                  {categories.map((cat) => {
+                    const isSelected = liveCategory === cat.name;
+                    return (
+                      <TouchableOpacity
+                        key={cat.name}
+                        style={[styles.selectorChip, isSelected && styles.selectorChipSelected]}
+                        onPress={() => setLiveCategory(cat.name)}
+                      >
+                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{cat.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
 
-        {/* Pills de Tags Disponibles y Sugeridos */}
-        <View style={styles.tagsContainer}>
-          {allAvailableTags.map((tag) => {
-            const isSelected = selectedTags.includes(tag);
-            return (
-              <TouchableOpacity
-                key={tag}
-                style={[styles.tagPill, isSelected && styles.tagPillSelected]}
-                onPress={() => toggleTag(tag)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tagPillText, isSelected && styles.tagPillTextSelected]}>
-                  {tag} {isSelected ? '✓' : '+'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Input para agregar tag personalizado */}
-        <View style={styles.customTagRow}>
-          <TextInput
-            style={styles.customTagInput}
-            placeholder="Añadir hashtag personalizado (ej. #estreno)"
-            placeholderTextColor="#777"
-            value={customTagInput}
-            onChangeText={setCustomTagInput}
-            onSubmitEditing={handleAddCustomTag}
-            returnKeyType="done"
-          />
-          <TouchableOpacity style={styles.addTagBtn} onPress={handleAddCustomTag} activeOpacity={0.8}>
-            <Plus size={16} color="#000000" />
-            <Text style={styles.addTagBtnText}>Agregar</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Visualización de Hashtags que se publicarán */}
-        {selectedTags.length > 0 && (
-          <View style={{ marginTop: 10 }}>
-            <Text style={{ color: '#8E8E93', fontSize: 11, marginBottom: 6 }}>
-              Hashtags incluidos en este video ({selectedTags.length}):
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {selectedTags.map((tag) => (
-                <View
-                  key={tag}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: 'rgba(206, 255, 0, 0.15)',
-                    borderWidth: 1,
-                    borderColor: COLORS.neonLime,
-                    borderRadius: 14,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    gap: 4,
-                  }}
-                >
-                  <Text style={{ color: COLORS.neonLime, fontSize: 12, fontWeight: '600' }}>
-                    {tag}
+                <View style={styles.liveRulesBox}>
+                  <ShieldCheck size={16} color="#34C759" style={{ marginRight: 8 }} />
+                  <Text style={styles.liveRulesText}>
+                    Cero modelos falsas. Transmisiones reales de creadores y actores verificados. Tu transmisión aparecerá destacada en la app móvil y web.
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => toggleTag(tag)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <X size={13} color={COLORS.neonLime} />
-                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-          </View>
-        )}
 
-        {/* 6. Selector de Visibilidad */}
-        <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Visibilidad</Text>
-        <View style={styles.chipRow}>
-          {visibilities.map((vis) => {
-            const isSelected = selectedVisibility === vis.name;
-            const IconComp = vis.icon;
-            return (
+                <TouchableOpacity
+                  style={styles.startLiveBtn}
+                  onPress={handleStartLive}
+                  disabled={isStartingLive}
+                  activeOpacity={0.85}
+                >
+                  {isStartingLive ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Radio size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.startLiveBtnText}>🔴 Iniciar Transmisión en Vivo</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ) : (
+          /* ==================================================== */
+          /* MODO PUBLICACIÓN DE VIDEO O SHORT                    */
+          /* ==================================================== */
+          <>
+            {/* 2. Hero Card: Selección de Video y Miniatura */}
+            <View style={styles.heroCard}>
+              <Text style={styles.heroTitle}>Publica con control y verificación</Text>
+
+              <View style={styles.heroRow}>
+                <View style={styles.checklist}>
+                  <View style={styles.checkItem}>
+                    <ShieldCheck size={16} color="#FFFFFF" />
+                    <Text style={styles.checkText}>Consentimiento obligatorio</Text>
+                  </View>
+
+                  <View style={styles.checkItem}>
+                    <View style={styles.ageIcon}>
+                      <Text style={styles.ageIconText}>18+</Text>
+                    </View>
+                    <Text style={styles.checkText}>Solo mayores de edad</Text>
+                  </View>
+
+                  <View style={styles.checkItem}>
+                    <Flag size={16} color="#FFFFFF" />
+                    <Text style={styles.checkText}>Puede ser reportado</Text>
+                  </View>
+                </View>
+
+                {/* Preview de Miniatura si se seleccionó o fotograma de video */}
+                {selectedThumbnail ? (
+                  <View style={{ position: 'relative' }}>
+                    <Image source={{ uri: selectedThumbnail.uri }} style={styles.heroImage} />
+                    <TouchableOpacity
+                      style={styles.removeThumbBtn}
+                      onPress={() => setSelectedThumbnail(null)}
+                    >
+                      <X size={12} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                ) : selectedVideo ? (
+                  <View style={[styles.heroImage, styles.videoPreviewPlaceholder]}>
+                    <VideoIcon size={24} color={COLORS.neonLime} />
+                    <Text style={styles.videoFrameLabel}>Fotograma de Video</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.heroImage, styles.videoPreviewPlaceholder]}>
+                    <Film size={24} color="#555562" />
+                    <Text style={styles.videoFrameLabel}>Sin video</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Botón Seleccionar Video */}
               <TouchableOpacity
-                key={vis.name}
-                style={[styles.selectorChip, isSelected && styles.selectorChipSelected]}
-                onPress={() => setSelectedVisibility(vis.name)}
+                style={[styles.selectVideoBtn, selectedVideo && styles.selectVideoBtnActive]}
+                onPress={handlePickVideo}
+                activeOpacity={0.85}
               >
-                <IconComp
-                  size={15}
-                  color={isSelected ? '#000000' : '#FFFFFF'}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                  {vis.name}
+                {selectedVideo ? (
+                  <Check size={18} color="#000000" style={{ marginRight: 6 }} />
+                ) : (
+                  <UploadCloud size={20} color="#000000" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.selectVideoBtnText}>
+                  {selectedVideo ? `Video Seleccionado ✓` : 'Seleccionar Video MP4/MOV'}
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
 
-        {/* 7. Toggles de Consentimiento y Verificación */}
-        <View style={styles.togglesCard}>
-          <View style={styles.toggleRow}>
-            <ShieldCheck size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toggleLabel}>
-              Confirmo que todas las personas participaron con consentimiento
-            </Text>
-            <Switch
-              value={consentGranted}
-              onValueChange={setConsentGranted}
-              trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+              {/* Selector interactivo de Formato Detectado (Short vs Completo) */}
+              {selectedVideo && (
+                <View style={styles.aspectRatioContainer}>
+                  <View style={styles.aspectRatioHeader}>
+                    <Film size={14} color={COLORS.neonLime} style={{ marginRight: 6 }} />
+                    <Text style={styles.aspectRatioLabel}>Formato Detectado:</Text>
+                    <Text style={styles.aspectRatioValue}>
+                      {aspectRatio} · {isShort ? '⚡ Short / Clip' : '🎬 Video Completo'}
+                    </Text>
+                  </View>
+                  <View style={styles.formatToggleRow}>
+                    <TouchableOpacity
+                      style={[styles.formatToggleBtn, !isShort && styles.formatToggleBtnActive]}
+                      onPress={() => {
+                        setIsShort(false);
+                        setAspectRatio('16:9');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.formatToggleText, !isShort && styles.formatToggleTextActive]}>
+                        🎬 Video Completo (16:9)
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.formatToggleBtn, isShort && styles.formatToggleBtnActive]}
+                      onPress={() => {
+                        setIsShort(true);
+                        setAspectRatio('9:16');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.formatToggleText, isShort && styles.formatToggleTextActive]}>
+                        ⚡ Short / Vertical (9:16)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
-          <View style={styles.toggleRow}>
-            <View style={[styles.ageIcon, { marginRight: 10 }]}>
-              <Text style={styles.ageIconText}>18+</Text>
+              {/* Botón Seleccionar Miniatura OPCIONAL */}
+              <TouchableOpacity
+                style={styles.selectThumbBtn}
+                onPress={handlePickThumbnail}
+                activeOpacity={0.85}
+              >
+                <ImageIcon size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.selectThumbBtnText}>
+                  {selectedThumbnail ? 'Miniatura personalizada ✓' : 'Agregar Miniatura Personalizada (Opcional)'}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.formatHint}>
+                Formatos soportados: MP4, MOV · Si no eliges miniatura, se extraerá una parte del video automáticamente
+              </Text>
             </View>
-            <Text style={styles.toggleLabel}>Todas las personas son mayores de 18</Text>
-            <Switch
-              value={isOver18}
-              onValueChange={setIsOver18}
-              trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
 
-          <View style={[styles.toggleRow, { borderBottomWidth: 0 }]}>
-            <AlertOctagon size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toggleLabel}>Permitir comentarios y me gustas</Text>
-            <Switch
-              value={allowComments}
-              onValueChange={setAllowComments}
-              trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-        </View>
-
-        {/* 8. Botón Principal Publicar Video */}
-        <TouchableOpacity
-          style={[styles.publishBtn, isPublishing && styles.publishBtnDisabled]}
-          onPress={handlePublishVideo}
-          disabled={isPublishing}
-          activeOpacity={0.85}
-        >
-          {isPublishing ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ActivityIndicator size="small" color="#000000" />
-              <Text style={styles.publishBtnText}>{uploadStatus || 'Publicando video...'}</Text>
+            {/* 3. Inputs de Formulario */}
+            <View style={styles.inputCard}>
+              <View style={styles.inputHeader}>
+                <Text style={styles.inputLabel}>Título del video *</Text>
+                <Text style={styles.charCounter}>{title.length}/100</Text>
+              </View>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej. Sesión Nocturna 4K Ultra HD"
+                placeholderTextColor="#777"
+                value={title}
+                onChangeText={setTitle}
+                maxLength={100}
+              />
             </View>
-          ) : (
-            <>
-              <Send size={18} color="#000000" style={{ marginRight: 8 }} />
-              <Text style={styles.publishBtnText}>Publicar video en {selectedCategory}</Text>
-            </>
-          )}
-        </TouchableOpacity>
+
+            <View style={[styles.inputCard, { marginTop: 12 }]}>
+              <View style={styles.inputHeader}>
+                <Text style={styles.inputLabel}>Describe tu publicación...</Text>
+                <Text style={styles.charCounter}>{description.length}/500</Text>
+              </View>
+              <TextInput
+                style={[styles.textInput, { height: 70 }]}
+                placeholder="Añade detalles, créditos o palabras clave..."
+                placeholderTextColor="#777"
+                value={description}
+                onChangeText={setDescription}
+                maxLength={500}
+                multiline
+              />
+            </View>
+
+            {/* 4. Selector de Categoría (Para posicionar en búsquedas) */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>Categoría de Posicionamiento</Text>
+              <Text style={styles.sectionHint}>Define en qué sección aparecerá</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {categories.map((cat) => {
+                const isSelected = selectedCategory === cat.name;
+                const IconComp = cat.icon;
+                return (
+                  <TouchableOpacity
+                    key={cat.name}
+                    style={[styles.selectorChip, isSelected && styles.selectorChipSelected]}
+                    onPress={() => setSelectedCategory(cat.name)}
+                    activeOpacity={0.8}
+                  >
+                    <IconComp
+                      size={15}
+                      color={isSelected ? '#000000' : '#FFFFFF'}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* 5. Selector de Hashtags Dinámicos por Búsqueda */}
+            <View style={[styles.sectionHeaderRow, { marginTop: 14 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Hash size={16} color={COLORS.neonLime} />
+                <Text style={styles.sectionLabel}>Hashtags para Búsquedas</Text>
+              </View>
+              <Text style={styles.sectionHint}>Escribe palabras clave para buscar</Text>
+            </View>
+
+            {/* Buscador de Hashtags con autocompletado en tiempo real */}
+            <View style={styles.tagSearchBox}>
+              <Search size={16} color={COLORS.neonLime} style={{ marginLeft: 12, marginRight: 8 }} />
+              <TextInput
+                style={styles.tagSearchInput}
+                placeholder="Escribe palabra clave (ej. amateur, hd, estreno)..."
+                placeholderTextColor="#777"
+                value={customTagInput}
+                onChangeText={setCustomTagInput}
+                onSubmitEditing={handleAddCustomTag}
+                returnKeyType="done"
+              />
+              {customTagInput.length > 0 && (
+                <TouchableOpacity onPress={() => setCustomTagInput('')} style={{ padding: 8 }}>
+                  <X size={15} color="#8E8E93" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Sugerencias Dinámicas de Autocompletado: aparecen SOLO al escribir */}
+            {customTagInput.trim().length > 0 && (
+              <View style={styles.autocompleteSuggestions}>
+                <Text style={styles.autocompleteHeader}>Sugerencias coincidentes:</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {allAvailableTags
+                    .filter((t) => {
+                      const q = customTagInput.trim().toLowerCase().replace(/^#+/, '');
+                      return t.toLowerCase().replace(/^#+/, '').includes(q) && !selectedTags.includes(t);
+                    })
+                    .map((tag) => (
+                      <TouchableOpacity
+                        key={tag}
+                        style={styles.autocompletePill}
+                        onPress={() => {
+                          toggleTag(tag);
+                          setCustomTagInput('');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.autocompletePillText}>{tag}</Text>
+                        <Plus size={13} color={COLORS.neonLime} />
+                      </TouchableOpacity>
+                    ))}
+                  {/* Opción para crear nuevo tag si no existe exacto */}
+                  {!allAvailableTags.some(
+                    (t) => t.toLowerCase().replace(/^#+/, '') === customTagInput.trim().toLowerCase().replace(/^#+/, '')
+                  ) && (
+                    <TouchableOpacity
+                      style={[styles.autocompletePill, styles.createNewTagPill]}
+                      onPress={handleAddCustomTag}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.createNewTagPillText}>
+                        + Crear #{customTagInput.trim().toLowerCase().replace(/^#+/, '')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Visualización de Hashtags seleccionados en este video */}
+            {selectedTags.length > 0 ? (
+              <View style={{ marginTop: 10 }}>
+                <Text style={{ color: '#8E8E93', fontSize: 11, marginBottom: 6 }}>
+                  Hashtags incluidos en este video ({selectedTags.length}):
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {selectedTags.map((tag) => (
+                    <View key={tag} style={styles.selectedTagBadge}>
+                      <Text style={styles.selectedTagText}>{tag}</Text>
+                      <TouchableOpacity
+                        onPress={() => toggleTag(tag)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <X size={13} color={COLORS.neonLime} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.noTagsHint}>
+                Escribe una palabra clave en el buscador para asociar hashtags a tu video.
+              </Text>
+            )}
+
+            {/* 6. Selector de Visibilidad */}
+            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Visibilidad</Text>
+            <View style={styles.chipRow}>
+              {visibilities.map((vis) => {
+                const isSelected = selectedVisibility === vis.name;
+                const IconComp = vis.icon;
+                return (
+                  <TouchableOpacity
+                    key={vis.name}
+                    style={[styles.selectorChip, isSelected && styles.selectorChipSelected]}
+                    onPress={() => setSelectedVisibility(vis.name)}
+                  >
+                    <IconComp
+                      size={15}
+                      color={isSelected ? '#000000' : '#FFFFFF'}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                      {vis.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 7. Toggles de Consentimiento y Verificación */}
+            <View style={styles.togglesCard}>
+              <View style={styles.toggleRow}>
+                <ShieldCheck size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
+                <Text style={styles.toggleLabel}>
+                  Confirmo que todas las personas participaron con consentimiento
+                </Text>
+                <Switch
+                  value={consentGranted}
+                  onValueChange={setConsentGranted}
+                  trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <View style={styles.toggleRow}>
+                <View style={[styles.ageIcon, { marginRight: 10 }]}>
+                  <Text style={styles.ageIconText}>18+</Text>
+                </View>
+                <Text style={styles.toggleLabel}>Todas las personas son mayores de 18</Text>
+                <Switch
+                  value={isOver18}
+                  onValueChange={setIsOver18}
+                  trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <View style={[styles.toggleRow, { borderBottomWidth: 0 }]}>
+                <AlertOctagon size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
+                <Text style={styles.toggleLabel}>Permitir comentarios y me gustas</Text>
+                <Switch
+                  value={allowComments}
+                  onValueChange={setAllowComments}
+                  trackColor={{ false: '#3A3A3C', true: COLORS.neonLime }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
+            {/* 8. Botón Principal Publicar Video */}
+            <TouchableOpacity
+              style={[styles.publishBtn, isPublishing && styles.publishBtnDisabled]}
+              onPress={handlePublishVideo}
+              disabled={isPublishing}
+              activeOpacity={0.85}
+            >
+              {isPublishing ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator size="small" color="#000000" />
+                  <Text style={styles.publishBtnText}>{uploadStatus || 'Publicando video...'}</Text>
+                </View>
+              ) : (
+                <>
+                  <Send size={18} color="#000000" style={{ marginRight: 8 }} />
+                  <Text style={styles.publishBtnText}>Publicar video en {selectedCategory}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -1248,6 +1512,331 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     fontWeight: '500',
+  },
+  modeTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#121218',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: 10,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#1C1C24',
+    borderWidth: 1,
+    borderColor: '#2C2C38',
+  },
+  modeTabActive: {
+    backgroundColor: COLORS.neonLime,
+    borderColor: COLORS.neonLime,
+  },
+  modeTabLiveActive: {
+    backgroundColor: '#FF2D55',
+    borderColor: '#FF2D55',
+  },
+  modeTabText: {
+    color: '#8E8E93',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modeTabTextActive: {
+    color: '#000000',
+  },
+  modeTabTextLiveActive: {
+    color: '#FFFFFF',
+  },
+  aspectRatioContainer: {
+    backgroundColor: '#181820',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A38',
+    marginBottom: 8,
+  },
+  aspectRatioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  aspectRatioLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  aspectRatioValue: {
+    color: COLORS.neonLime,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  formatToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  formatToggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#242430',
+    borderWidth: 1,
+    borderColor: '#363646',
+  },
+  formatToggleBtnActive: {
+    backgroundColor: 'rgba(206, 255, 0, 0.15)',
+    borderColor: COLORS.neonLime,
+  },
+  formatToggleText: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  formatToggleTextActive: {
+    color: COLORS.neonLime,
+    fontWeight: 'bold',
+  },
+  tagSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceCard,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 6,
+    marginBottom: 8,
+  },
+  tagSearchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 13,
+    paddingVertical: 10,
+  },
+  autocompleteSuggestions: {
+    backgroundColor: '#161620',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A38',
+    marginBottom: 10,
+  },
+  autocompleteHeader: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  autocompletePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#22222E',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#363648',
+    gap: 4,
+  },
+  autocompletePillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  createNewTagPill: {
+    backgroundColor: 'rgba(206, 255, 0, 0.12)',
+    borderColor: COLORS.neonLime,
+  },
+  createNewTagPillText: {
+    color: COLORS.neonLime,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  selectedTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(206, 255, 0, 0.15)',
+    borderWidth: 1,
+    borderColor: COLORS.neonLime,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  selectedTagText: {
+    color: COLORS.neonLime,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noTagsHint: {
+    color: '#666672',
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  liveContainer: {
+    gap: 14,
+  },
+  liveHeaderCard: {
+    backgroundColor: '#161622',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2E1824',
+  },
+  liveBadgeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 45, 85, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FF2D55',
+  },
+  liveStudioTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  liveStudioSubtitle: {
+    color: '#8E8E93',
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  liveActiveCard: {
+    backgroundColor: '#14141E',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#FF2D55',
+    alignItems: 'center',
+  },
+  liveActiveBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 16,
+  },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2D55',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  livePillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  viewerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  viewerCountText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  broadcastPreview: {
+    width: '100%',
+    paddingVertical: 24,
+    alignItems: 'center',
+    backgroundColor: '#0A0A10',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#242432',
+    marginBottom: 16,
+  },
+  broadcastTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+    paddingHorizontal: 12,
+  },
+  broadcastMeta: {
+    color: '#FF2D55',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  broadcastHint: {
+    color: '#777785',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    lineHeight: 16,
+  },
+  stopLiveBtn: {
+    backgroundColor: '#FF3B30',
+    paddingVertical: 14,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  stopLiveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  liveSetupCard: {
+    backgroundColor: COLORS.surfaceCard,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  liveRulesBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.3)',
+    marginBottom: 18,
+  },
+  liveRulesText: {
+    color: '#D0D0D8',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  startLiveBtn: {
+    backgroundColor: '#FF2D55',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  startLiveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });
 

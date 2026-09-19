@@ -9,6 +9,8 @@ export interface UserProfile {
   authProvider?: 'LOCAL' | 'GOOGLE' | 'FACEBOOK';
   avatarUrl?: string;
   creatorProfileId?: string;
+  stageName?: string;
+  isVip?: boolean;
   isVerified?: boolean;
 }
 
@@ -65,6 +67,8 @@ export interface VideoItem {
   tags?: string[];
   isNew: boolean;
   isFollowersOnly?: boolean;
+  isShort?: boolean;
+  aspectRatio?: string;
   actorId?: string;
   actorName?: string;
   actorAvatar?: string;
@@ -77,6 +81,22 @@ export interface VideoItem {
   isFollowingActor?: boolean;
   commentsCount?: number;
   createdAt?: string;
+}
+
+export interface LiveStreamItem {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorAvatar: string;
+  title: string;
+  category: string;
+  viewersCount: number;
+  likesCount?: number;
+  streamUrl: string;
+  startedAt: string;
+  streamThumbnail?: string;
+  goalText?: string;
+  goalPercent?: number;
 }
 
 export interface CommentItem {

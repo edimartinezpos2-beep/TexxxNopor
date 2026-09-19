@@ -1107,4 +1107,159 @@ router.get('/api/settings/public', async (req: Request, res: Response) => {
   }
 });
 
+// ====================================================
+// GESTIÓN Y REVISIÓN DE VERIFICACIÓN DE ACTORES (ADMIN)
+// ====================================================
+router.get(
+  '/api/admin/actors/verification-requests',
+  authenticateJWT,
+  requireRole(UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const actors = await prisma.actor.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              createdAt: true,
+              isVerified: true,
+            },
+          },
+          followers: true,
+          videos: {
+            select: {
+              id: true,
+              title: true,
+              videoUrl: true,
+              thumbnailUrl: true,
+              durationSeconds: true,
+              viewsCount: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+
+      const MIN_FOLLOWERS = 10;
+      const MIN_WATCH_HOURS = 0.5;
+
+      const formatted = actors.map((a) => {
+        const followersCount = a.followers.length;
+        const totalDurationSecondsWatched = a.videos.reduce((acc, v) => {
+          return acc + (Number(v.viewsCount) * (v.durationSeconds || 60));
+        }, 0);
+        const totalWatchHours = Number((totalDurationSecondsWatched / 3600).toFixed(2));
+        const sampleVideo = a.verificationVideoUrl || (a.videos.length > 0 ? a.videos[0].videoUrl : null);
+        const meetsCriteria = followersCount >= MIN_FOLLOWERS && totalWatchHours >= MIN_WATCH_HOURS;
+
+        return {
+          id: a.id,
+          userId: a.userId,
+          name: a.name,
+          stageName: a.stageName,
+          bio: a.bio,
+          avatarUrl: a.avatarUrl,
+          bannerUrl: a.bannerUrl,
+          nationality: a.nationality,
+          isVerified: Boolean(a.isVerified),
+          followersCount,
+          videosCount: a.videos.length,
+          totalWatchHours,
+          sampleVideoUrl: sampleVideo,
+          recentVideos: a.videos.slice(0, 3),
+          meetsCriteria,
+          minFollowersRequired: MIN_FOLLOWERS,
+          minWatchHoursRequired: MIN_WATCH_HOURS,
+          createdAt: a.createdAt,
+        };
+      });
+
+      return res.json({
+        status: 'success',
+        total: formatted.length,
+        pendingCount: formatted.filter((a) => !a.isVerified).length,
+        actors: formatted,
+      });
+    } catch (err: any) {
+      console.error('Error fetching actor verification requests:', err);
+      return res.status(500).json({ error: 'Error al consultar solicitudes de verificación de actores' });
+    }
+  }
+);
+
+router.post(
+  '/api/admin/actors/:id/verify',
+  authenticateJWT,
+  requireRole(UserRole.ADMIN),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { approved, notes } = req.body;
+      const isApproved = approved === true || approved === 'true';
+      const adminId = req.user!.id;
+
+      const actor = await prisma.actor.findUnique({
+        where: { id },
+        include: { user: true },
+      });
+
+      if (!actor) {
+        return res.status(404).json({ error: 'Actor no encontrado' });
+      }
+
+      const updatedActor = await prisma.actor.update({
+        where: { id },
+        data: { isVerified: isApproved },
+      });
+
+      if (actor.userId) {
+        await prisma.user.update({
+          where: { id: actor.userId },
+          data: { isVerified: isApproved },
+        });
+      }
+
+      await AuditService.log({
+        adminId,
+        action: isApproved ? 'ACTOR_VERIFY_APPROVE' : 'ACTOR_VERIFY_REJECT',
+        entityType: 'ACTOR',
+        entityId: id,
+        details: {
+          stageName: actor.stageName,
+          approved: isApproved,
+          notes: notes || (isApproved ? 'Verificación aprobada por administrador' : 'Verificación rechazada por falta de métricas u optimización'),
+        },
+        ipAddress: req.ip,
+      });
+
+      if (actor.userId) {
+        await NotificationService.notify({
+          recipientId: actor.userId,
+          type: 'NEW_FOLLOWER',
+          title: isApproved ? '¡Felicidades! Tu cuenta de Actor ha sido Verificada 🎉' : 'Actualización sobre tu Verificación de Actor',
+          message: isApproved
+            ? `Tu perfil de actor @${actor.stageName} ha sido verificado oficialmente por el equipo administrativo.`
+            : `Tu solicitud de verificación para @${actor.stageName} no ha sido aprobada en este momento. Revisa tus métricas de seguidores y horas de reproducción.`,
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: isApproved
+          ? `Actor @${actor.stageName} verificado con éxito.`
+          : `Verificación para @${actor.stageName} actualizada a no verificada.`,
+        actor: updatedActor,
+      });
+    } catch (err: any) {
+      console.error('Error in actor verification review:', err);
+      return res.status(500).json({ error: 'Error al procesar la verificación del actor' });
+    }
+  }
+);
+
 export default router;
+

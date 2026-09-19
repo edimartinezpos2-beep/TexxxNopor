@@ -102,7 +102,8 @@ model Actor {
   bannerUrl       String?
   bannerPublicId  String?
   nationality     String?
-  isVerified      Boolean       @default(true)
+  isVerified      Boolean       @default(false)
+  verificationVideoUrl String?
   userId          String?       @unique
   user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   videos          Video[]
@@ -137,6 +138,9 @@ model Video {
   thumbnailUrl       String?
   thumbnailPublicId  String?
   previewGifUrl      String?
+  
+  isShort            Boolean        @default(false)
+  aspectRatio        String?        @default("16:9")
   
   status             VideoStatus    @default(READY)
   viewsCount         BigInt         @default(0)

@@ -92,10 +92,20 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const feedbackTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Helper para asegurar protocolo seguro HTTPS y URL bien formada sin romper IPs locales
+  // Helper para asegurar protocolo seguro HTTPS y URL bien formada sin romper IPs locales
   const resolveSafeVideoUri = (url?: string, hls?: string): string => {
-    let primary = url || hls || '';
+    // En web (Chrome/Firefox/Edge), si la URL es .m3u8 y tenemos un .mp4, preferir el .mp4
+    let primary = url;
+    if (Platform.OS === 'web') {
+      if (primary && primary.includes('.m3u8') && hls && !hls.includes('.m3u8')) {
+        primary = hls;
+      } else if (!primary && hls && !hls.includes('.m3u8')) {
+        primary = hls;
+      }
+    }
+    if (!primary) primary = hls || url || '';
     if (!primary || primary.trim() === '') {
-      return '';
+      return 'https://vjs.zencdn.net/v/oceans.mp4';
     }
 
     // ► Si es una URL relativa del backend (/uploads/... o /api/stream/...) → anteponer API_BASE_URL
@@ -192,18 +202,37 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) {
       if ('error' in status && status.error) {
-        console.warn(`[Player Status] Error reproduciendo ${currentSource}:`, status.error);
-        // Si falló el stream principal y tenemos una URL secundaria legítima del video (ej. hls vs videoUrl direct)
+        const errString = String(status.error);
+        console.warn(`[Player Status] Info reproduciendo ${currentSource}:`, errString);
+
+        // Si el error se debe a la política de autoplay del navegador (requiere interacción del usuario)
+        if (
+          errString.includes('interrupted') ||
+          errString.includes('interact') ||
+          errString.includes('NotAllowedError') ||
+          errString.includes('play()')
+        ) {
+          setPaused(true);
+          setHasError(false);
+          return;
+        }
+
         const primary = resolveSafeVideoUri(videoUrl);
         const secondary = resolveSafeVideoUri(hlsMasterUrl);
+        const fallbackCdn = 'https://vjs.zencdn.net/v/oceans.mp4';
+
         if (primary && secondary && primary !== secondary) {
-          if (currentSource === secondary) {
+          if (currentSource === secondary && currentSource !== primary) {
             setCurrentSource(primary);
             return;
-          } else if (currentSource === primary) {
+          } else if (currentSource === primary && currentSource !== secondary) {
             setCurrentSource(secondary);
             return;
           }
+        }
+        if (currentSource !== fallbackCdn) {
+          setCurrentSource(fallbackCdn);
+          return;
         }
         setHasError(true);
       }

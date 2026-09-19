@@ -3,7 +3,7 @@
     "name": "TexxxNopor",
     "slug": "texxxnopor-mobile",
     "scheme": "texxxnopor",
-    "version": "2.4.3",
+    "version": "2.5.12",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.texxxnopor.mobile",
-      "versionCode": 8,
+      "versionCode": 9,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

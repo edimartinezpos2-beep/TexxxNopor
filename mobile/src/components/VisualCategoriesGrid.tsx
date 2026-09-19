@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { Layers, ChevronRight } from 'lucide-react-native';
+import { Hash, Layers, Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { api } from '../services/api';
 
 interface VisualCategory {
   id: string;
@@ -26,62 +27,61 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
   onSelectCategory,
 }) => {
   const { colors } = useTheme();
-
-  const categories: VisualCategory[] = [
+  const [categories, setCategories] = useState<VisualCategory[]>([
     {
       id: 'cat-1',
-      name: 'Latinas Hot',
+      name: '#parati',
       imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
-      count: '1,420 videos',
-      badge: 'POPULAR',
-    },
-    {
-      id: 'cat-2',
-      name: 'Amateur Casero',
-      imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
-      count: '3,890 videos',
+      count: 'Cargando...',
       badge: 'HOT',
     },
     {
-      id: 'cat-3',
-      name: 'Parejas Reales',
-      imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop',
-      count: '950 videos',
-    },
-    {
-      id: 'cat-4',
-      name: 'POV / En Primera Persona',
+      id: 'cat-2',
+      name: '#hd',
       imageUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop',
-      count: '2,130 videos',
+      count: 'Cargando...',
       badge: '4K',
     },
     {
+      id: 'cat-3',
+      name: '#amateur',
+      imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
+      count: 'Cargando...',
+      badge: 'POPULAR',
+    },
+    {
+      id: 'cat-4',
+      name: '#pareja',
+      imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop',
+      count: 'Cargando...',
+    },
+    {
       id: 'cat-5',
-      name: 'Milf & Maduras',
-      imageUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop',
-      count: '1,860 videos',
-    },
-    {
-      id: 'cat-6',
-      name: 'Cosplay & Anime',
+      name: '#nuevos',
       imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop',
-      count: '780 videos',
+      count: 'Cargando...',
     },
-    {
-      id: 'cat-7',
-      name: 'Realidad Virtual VR',
-      imageUrl: 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop',
-      count: '340 videos',
-      badge: '360°',
-    },
-    {
-      id: 'cat-8',
-      name: 'Producción Exclusiva',
-      imageUrl: 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop',
-      count: '510 videos',
-      badge: 'VIP',
-    },
-  ];
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.tags.getPopular().then((tags) => {
+      if (isMounted && Array.isArray(tags) && tags.length > 0) {
+        setCategories(
+          tags.map((t) => ({
+            id: t.id,
+            name: t.name.startsWith('#') ? t.name : `#${t.name}`,
+            imageUrl: t.imageUrl,
+            count: t.countFormatted || `${t.count} videos`,
+            badge: t.badge,
+          }))
+        );
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -89,14 +89,14 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
       <View style={styles.sectionHeader}>
         <View style={styles.titleWithIcon}>
           <View style={[styles.iconBox, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
-            <Layers size={15} color="#FF9500" />
+            <Hash size={16} color="#FF9500" />
           </View>
           <View>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Categorías Populares
+              Categorías Populares #Hashtags
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Explora según tus preferencias
+              Valores y catálogo real por etiqueta
             </Text>
           </View>
         </View>

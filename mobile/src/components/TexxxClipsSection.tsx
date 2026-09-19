@@ -24,8 +24,11 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
 
   if (!videos || videos.length === 0) return null;
 
-  // Tomamos hasta 8 videos para clips rápidos
-  const clips = videos.slice(0, 8);
+  // Filtrar videos verificados como shorts (isShort === true, aspectRatio === '9:16', o duración <= 60s)
+  const shortCandidates = videos.filter(
+    (v) => v.isShort === true || v.aspectRatio === '9:16' || (v.durationSeconds && v.durationSeconds <= 60)
+  );
+  const clips = (shortCandidates.length > 0 ? shortCandidates : videos).slice(0, 8);
 
   return (
     <View style={styles.container}>
@@ -41,11 +44,11 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
                 TexxxClips
               </Text>
               <View style={styles.liveBadge}>
-                <Text style={styles.liveBadgeText}>SHORTS</Text>
+                <Text style={styles.liveBadgeText}>SHORTS 9:16</Text>
               </View>
             </View>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Momentos intensos sin esperas (15 - 45 seg)
+              Momentos intensos sin esperas (formato vertical ≤ 60 seg)
             </Text>
           </View>
         </View>
@@ -67,8 +70,7 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
         contentContainerStyle={styles.scrollList}
       >
         {clips.map((item, idx) => {
-          // Generar una duración simulada de short si la original es larga
-          const shortDuration = `0:${20 + (idx * 7) % 35}`;
+          const shortDuration = item.duration || `0:${20 + (idx * 7) % 35}`;
 
           return (
             <TouchableOpacity

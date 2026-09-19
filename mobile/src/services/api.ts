@@ -62,21 +62,20 @@ export interface ActorStoryGroup {
 
 // URL de API: dinámica según entorno
 const getApiBaseUrl = (): string => {
-  // En navegador web: usar la misma origen que la página para evitar CORS/Mixed Content
+  // En navegador web: si es localhost probar puerto 5000
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && Platform.OS === 'web') {
     const hostname = window.location.hostname;
-    // En desarrollo local
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:4000';
+      return 'http://localhost:5000';
     }
-    // En producción web (Render / cualquier dominio), usar el origin del backend desplegado
     return 'https://texxxnopor-backend.onrender.com';
   }
-  // En app nativa (iOS / Android) → siempre el backend de producción en Render
+  // En app nativa (iOS / Android) → backend de producción en Render
   return 'https://texxxnopor-backend.onrender.com';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+const CLOUD_FALLBACK_URL = 'https://texxxnopor-backend.onrender.com';
 
 // ====================================================
 // ALMACÉN LOCAL REACTIVO
@@ -92,11 +91,12 @@ let localSubscriptions: string[] = [];
 // Helper para llamadas con fetch y timeout extendido a 60s (soporta cold-start de Render y throwOnError)
 async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnError?: boolean; timeoutMs?: number } = {}): Promise<T | null> {
   const { throwOnError = false, timeoutMs = 60000, ...fetchOptions } = options;
-  try {
+  
+  const tryFetch = async (baseUrl: string): Promise<T | null> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const res = await fetch(`${baseUrl}${endpoint}`, {
       ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
@@ -109,18 +109,26 @@ async function apiFetch<T>(endpoint: string, options: RequestInit & { throwOnErr
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
       const errMsg = errJson?.error || errJson?.details || `Error en el servidor (${res.status})`;
-      console.log(`[API ${res.status}] ${endpoint}:`, errMsg);
       if (throwOnError) {
         throw new Error(errMsg);
       }
       return null;
     }
     return await res.json();
+  };
+
+  try {
+    return await tryFetch(API_BASE_URL);
   } catch (err: any) {
-    console.log(`[Network Status] ${API_BASE_URL}${endpoint}:`, err.name, err.message);
+    // Si falló el localhost local, reintentar automáticamente contra Render en la nube
+    if (API_BASE_URL !== CLOUD_FALLBACK_URL) {
+      try {
+        return await tryFetch(CLOUD_FALLBACK_URL);
+      } catch (_) {}
+    }
     if (throwOnError) {
       if (err.name === 'AbortError') {
-        throw new Error('El servidor en la nube está despertando de reposo. Por favor espera unos segundos e intenta de nuevo.');
+        throw new Error('El servidor está despertando de reposo. Por favor espera unos segundos e intenta de nuevo.');
       }
       throw new Error(err.message || 'Error de conexión con el servidor.');
     }
@@ -156,6 +164,29 @@ export const api = {
 
       if (res) return res;
       return null;
+    },
+
+    // ⚡ Acceso con 1 toque como Usuario Anónimo VIP con todas las suscripciones activas
+    async loginDemoVip(): Promise<{ token: string; user: UserProfile }> {
+      const res = await apiFetch<{ token: string; user: UserProfile }>('/api/auth/demo-vip', {
+        method: 'POST',
+        throwOnError: false,
+      });
+
+      if (res && res.token) return res;
+
+      // Fallback local seguro si la red estuviera desconectada
+      return {
+        token: 'token_demo_vip_local',
+        user: {
+          id: 'usr_demo_vip',
+          email: 'anonimo@texxxnopor.com',
+          username: 'anonimo_vip',
+          role: 'CONSUMER',
+          isVerified: true,
+          avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop',
+        },
+      };
     },
 
     async register(
@@ -764,6 +795,8 @@ export const api = {
         videoUrl?: string;
         cloudinaryPublicId?: string;
         hlsMasterUrl?: string;
+        isShort?: boolean;
+        aspectRatio?: string;
       }
     ): Promise<VideoItem> {
       const res = await apiFetch<{ video: VideoItem }>('/api/admin/videos', {
@@ -797,6 +830,8 @@ export const api = {
         category: videoData.category || 'Para ti',
         tags: Array.isArray(videoData.tags) ? videoData.tags : ['#parati'],
         isNew: true,
+        isShort: videoData.isShort ?? false,
+        aspectRatio: videoData.aspectRatio || '16:9',
         actorId: assignedActor ? assignedActor.id : undefined,
         actorName: assignedActor ? assignedActor.stageName : 'Actor Principal',
         actorAvatar: assignedActor
@@ -1487,6 +1522,29 @@ export const api = {
         body: JSON.stringify({ key, value, description }),
       });
     },
+
+    // 7. Verificación de Actores
+    async getActorVerificationRequests(token: string): Promise<any[]> {
+      const res = await apiFetch<{ status: string; requests?: any[]; actors?: any[] }>('/api/admin/actors/verification-requests', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res?.requests || res?.actors || [];
+    },
+
+    async reviewActorVerification(
+      token: string,
+      actorId: string,
+      status: 'APPROVED' | 'REJECTED' | boolean,
+      notes?: string
+    ): Promise<any> {
+      const isApproved = typeof status === 'boolean' ? status : status === 'APPROVED';
+      return await apiFetch<any>(`/api/admin/actors/${actorId}/verify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isVerified: isApproved, approved: isApproved, rejectionReason: notes, notes }),
+        throwOnError: true,
+      });
+    },
   },
 
   // ====================================================
@@ -1689,6 +1747,50 @@ export const api = {
           '#verificado',
         ];
       }
+    },
+
+    async getPopular(): Promise<{ id: string; name: string; count: number; countFormatted: string; badge?: string; imageUrl: string }[]> {
+      try {
+        const res = await apiFetch<{ status: string; tags: any[] }>('/api/tags/popular');
+        if (res && Array.isArray(res.tags) && res.tags.length > 0) return res.tags;
+      } catch (_) {}
+      return [
+        { id: 'pop-1', name: '#parati', count: 6, countFormatted: '6 videos', badge: 'HOT', imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop' },
+        { id: 'pop-2', name: '#hd', count: 5, countFormatted: '5 videos', badge: 'HOT', imageUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop' },
+        { id: 'pop-3', name: '#amateur', count: 3, countFormatted: '3 videos', badge: 'POPULAR', imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop' },
+        { id: 'pop-4', name: '#pareja', count: 2, countFormatted: '2 videos', badge: 'POPULAR', imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop' },
+        { id: 'pop-5', name: '#nuevos', count: 2, countFormatted: '2 videos', imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop' },
+      ];
+    },
+  },
+
+  // ====================================================
+  // 10.2 TRANSMISIONES EN VIVO REALES (EXCLUSIVO ACTORES)
+  // ====================================================
+  live: {
+    async getActive(): Promise<import('../types/auth').LiveStreamItem[]> {
+      const res = await apiFetch<{ status: string; streams: import('../types/auth').LiveStreamItem[] }>('/api/live/active');
+      if (res && Array.isArray(res.streams)) return res.streams;
+      return [];
+    },
+
+    async start(token: string, data: { title: string; category?: string }): Promise<import('../types/auth').LiveStreamItem | null> {
+      const res = await apiFetch<{ status: string; stream: import('../types/auth').LiveStreamItem }>('/api/live/start', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+        throwOnError: true,
+      });
+      return res?.stream || null;
+    },
+
+    async stop(token: string, streamId?: string): Promise<boolean> {
+      await apiFetch('/api/live/stop', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: streamId ? JSON.stringify({ streamId }) : undefined,
+      });
+      return true;
     },
   },
 
