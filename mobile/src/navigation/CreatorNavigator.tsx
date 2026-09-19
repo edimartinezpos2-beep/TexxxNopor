@@ -23,11 +23,14 @@ import {
   Sparkles,
   CheckCircle2,
   RefreshCw,
+  Radio,
 } from 'lucide-react-native';
 import { PublishScreen } from '../screens/PublishScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { VideoDetailPlayerScreen } from '../screens/VideoDetailPlayerScreen';
+import { TikTokShortsScreen } from '../screens/TikTokShortsScreen';
+import { TikTokLiveBroadcasterScreen } from '../screens/TikTokLiveBroadcasterScreen';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { VideoItem } from '../types/auth';
@@ -170,6 +173,20 @@ export const CreatorNavigator: React.FC<CreatorNavigatorProps> = ({
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
 
   if (selectedVideo) {
+    const isShort =
+      selectedVideo.isShort ||
+      selectedVideo.aspectRatio === '9:16' ||
+      (selectedVideo.durationSeconds && selectedVideo.durationSeconds <= 60);
+
+    if (isShort) {
+      return (
+        <TikTokShortsScreen
+          initialVideos={[selectedVideo]}
+          initialIndex={0}
+          onBack={() => setSelectedVideo(null)}
+        />
+      );
+    }
     return <VideoDetailPlayerScreen video={selectedVideo} onBack={() => setSelectedVideo(null)} />;
   }
 
@@ -198,7 +215,32 @@ export const CreatorNavigator: React.FC<CreatorNavigatorProps> = ({
         }}
       />
 
-      {/* 2. TAB MIS VIDEOS SUBIDOS */}
+      {/* 2. TAB EMITIR LIVE (CONFIGURACIÓN Y ESTUDIO EN VIVO - IMAGEN 4) */}
+      <Tab.Screen
+        name="EmitirLive"
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View
+              style={[
+                styles.tabIconWrapper,
+                focused && [styles.tabIconWrapperActive, { backgroundColor: 'rgba(255, 45, 85, 0.2)' }],
+              ]}
+            >
+              <Radio size={22} color={focused ? '#FF2D55' : color} />
+            </View>
+          ),
+          tabBarLabel: 'Emitir LIVE',
+          tabBarActiveTintColor: '#FF2D55',
+        }}
+      >
+        {({ navigation }) => (
+          <TikTokLiveBroadcasterScreen
+            onClose={() => navigation.navigate('Publicar')}
+          />
+        )}
+      </Tab.Screen>
+
+      {/* 3. TAB MIS VIDEOS SUBIDOS */}
       <Tab.Screen
         name="MisVideos"
         options={{

@@ -15,10 +15,19 @@ import { useTheme } from '../context/ThemeContext';
 
 import { api } from '../services/api';
 import { LiveStreamItem } from '../types/auth';
+import { TikTokLiveSpectatorScreen } from '../screens/TikTokLiveSpectatorScreen';
 
 const { height } = Dimensions.get('window');
 
-export const LiveCamsTeaser: React.FC = () => {
+interface LiveCamsTeaserProps {
+  onSelectLive?: (stream: LiveStreamItem) => void;
+  onViewActor?: (actorId?: string, actorName?: string) => void;
+}
+
+export const LiveCamsTeaser: React.FC<LiveCamsTeaserProps> = ({
+  onSelectLive,
+  onViewActor,
+}) => {
   const { colors } = useTheme();
   const [activeStreams, setActiveStreams] = useState<LiveStreamItem[]>([]);
   const [activeStream, setActiveStream] = useState<LiveStreamItem | null>(null);
@@ -150,93 +159,18 @@ export const LiveCamsTeaser: React.FC = () => {
         ))}
       </ScrollView>
 
-      {/* Modal Interactivo de Transmisión en Vivo */}
+      {/* Modal Interactivo de Transmisión en Vivo Estilo TikTok (Imagen 3) */}
       {activeStream && (
         <Modal
           visible={true}
           animationType="slide"
           onRequestClose={() => setActiveStream(null)}
         >
-          <View style={[styles.modalContainer, { backgroundColor: '#0A0A0E' }]}>
-            {/* Header del Stream */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalStreamerRow}>
-                <Image source={{ uri: activeStream.actorAvatar }} style={styles.modalAvatar as any} />
-                <View>
-                  <Text style={styles.modalStreamerName}>{activeStream.actorName}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={styles.modalLiveDot} />
-                    <Text style={styles.modalLiveText}>EN VIVO • {activeStream.viewersCount} espectadores</Text>
-                  </View>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setActiveStream(null)}
-                style={styles.modalCloseBtn}
-              >
-                <X size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Pantalla del Stream con imagen y overlay interactivo */}
-            <View style={styles.streamScreenWrapper}>
-              <Image
-                source={{ uri: activeStream.streamThumbnail }}
-                style={styles.streamMainImage as any}
-                resizeMode="cover"
-              />
-
-              {/* Badge de Meta */}
-              <View style={styles.streamGoalBox}>
-                <Text style={styles.streamGoalTitle}>🎯 {activeStream.goalText}</Text>
-                <View style={styles.streamProgressBar}>
-                  <View style={[styles.streamProgressFill, { width: `${activeStream.goalPercent}%` }]} />
-                </View>
-                <Text style={styles.streamProgressLabel}>{activeStream.goalPercent}% completado</Text>
-              </View>
-            </View>
-
-            {/* Chat en vivo */}
-            <View style={styles.chatSection}>
-              <Text style={styles.chatHeaderTitle}>Chat en Vivo de la Sala</Text>
-              <ScrollView style={styles.chatScroll} showsVerticalScrollIndicator={false}>
-                {chatMessages.map((msg) => (
-                  <View key={msg.id} style={styles.chatMessageRow}>
-                    <Text style={[styles.chatUser, msg.user === 'Tú' && { color: '#05D9E8' }]}>
-                      {msg.user}:
-                    </Text>
-                    <Text style={styles.chatText}>{msg.text}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-
-              {/* Input del Chat y Botón de Me Gusta */}
-              <View style={styles.chatInputRow}>
-                <TextInput
-                  style={styles.chatInput}
-                  placeholder="Escribe un mensaje en la sala..."
-                  placeholderTextColor="#7E7E90"
-                  value={chatMessage}
-                  onChangeText={setChatMessage}
-                />
-                <TouchableOpacity
-                  style={[styles.sendBtn, { backgroundColor: colors.primary }]}
-                  onPress={handleSendChat}
-                >
-                  <Send size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.heartBtn}
-                  onPress={() => setStreamLikes((c) => c + 1)}
-                >
-                  <Heart size={20} color="#FF2D55" fill="#FF2D55" />
-                  <Text style={styles.heartText}>{streamLikes}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
+          <TikTokLiveSpectatorScreen
+            stream={activeStream}
+            onClose={() => setActiveStream(null)}
+            onViewActor={onViewActor}
+          />
         </Modal>
       )}
     </View>

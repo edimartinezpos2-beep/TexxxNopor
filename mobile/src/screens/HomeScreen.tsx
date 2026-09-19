@@ -674,6 +674,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <TexxxClipsSection
                   videos={videoList}
                   onSelectVideo={onSelectVideo}
+                  onViewActor={onViewActor}
                 />
               )}
 
@@ -714,7 +715,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
               {/* 9. Transmisiones en Vivo / Cams Teaser con Sala Interactiva */}
               {!searchQuery && (
-                <LiveCamsTeaser />
+                <LiveCamsTeaser
+                  onViewActor={onViewActor}
+                />
               )}
 
               {/* 10. Zona de Videojuegos +18 y Nutaku */}

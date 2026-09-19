@@ -11,8 +11,11 @@ import { ActorsScreen } from '../screens/ActorsScreen';
 import { FollowingScreen } from '../screens/FollowingScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { VideoDetailPlayerScreen } from '../screens/VideoDetailPlayerScreen';
+import { TikTokShortsScreen } from '../screens/TikTokShortsScreen';
+import { TikTokLiveSpectatorScreen } from '../screens/TikTokLiveSpectatorScreen';
 import { useTheme } from '../context/ThemeContext';
-import { VideoItem } from '../types/auth';
+import { VideoItem, LiveStreamItem } from '../types/auth';
+import { api } from '../services/api';
 
 const Tab = createBottomTabNavigator();
 
@@ -27,11 +30,15 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
   const isLandscape = width > height;
 
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+  const [activeLiveStream, setActiveLiveStream] = useState<LiveStreamItem | null>(null);
   const [targetActorId, setTargetActorId] = useState<string | null>(null);
 
   const handleViewActor = (actorId?: string, actorName?: string) => {
     if (selectedVideo) {
       setSelectedVideo(null);
+    }
+    if (activeLiveStream) {
+      setActiveLiveStream(null);
     }
     if (actorId) {
       setTargetActorId(actorId);
@@ -39,8 +46,43 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
     navigation.navigate('Actores');
   };
 
-  // Si hay un video seleccionado, mostramos la pantalla de detalle/reproductor con botón Volver
+  // Si hay una transmisión en vivo seleccionada, mostramos TikTokLiveSpectatorScreen (Imagen 3)
+  if (activeLiveStream) {
+    return (
+      <TikTokLiveSpectatorScreen
+        stream={activeLiveStream}
+        onClose={() => setActiveLiveStream(null)}
+        onViewActor={handleViewActor}
+      />
+    );
+  }
+
+  // Si hay un video seleccionado:
   if (selectedVideo) {
+    // Si es formato Short vertical (≤ 60s o 9:16), mostramos TikTokShortsScreen (Imágenes 1 y 2)
+    const isShort =
+      selectedVideo.isShort ||
+      selectedVideo.aspectRatio === '9:16' ||
+      (selectedVideo.durationSeconds && selectedVideo.durationSeconds <= 60);
+
+    if (isShort) {
+      return (
+        <TikTokShortsScreen
+          initialVideos={[selectedVideo]}
+          initialIndex={0}
+          onBack={() => setSelectedVideo(null)}
+          onOpenLive={() => {
+            setSelectedVideo(null);
+            api.live.getActive().then((lives) => {
+              if (lives && lives.length > 0) setActiveLiveStream(lives[0]);
+            });
+          }}
+          onViewActor={handleViewActor}
+        />
+      );
+    }
+
+    // Video regular horizontal tradicional
     return (
       <VideoDetailPlayerScreen
         video={selectedVideo}

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import {
   ShieldCheck,
@@ -55,6 +56,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
   const [age, setAge] = useState('');
   const [birthDateText, setBirthDateText] = useState('');
   const [isOver18, setIsOver18] = useState(true);
+
+  // Estados para Recuperación de Contraseña Cyberpunk (TexxxNopor)
+  const [recoveryEmailFocused, setRecoveryEmailFocused] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const shakeAnim = React.useRef(new Animated.Value(0)).current;
+
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: -7, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 7, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
 
   // Helper para calcular edad exacta desde DD/MM/AAAA
   const calculateAgeFromDate = (dateStr: string): number | null => {
@@ -232,34 +248,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
 
   // 1. Solicitar código de recuperación
   const handleRequestResetCode = async () => {
+    setRecoveryError('');
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!email.trim()) {
-      setErrorMessage('Por favor ingresa tu correo electrónico.');
+    const cleanEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setRecoveryError('Ingresa un correo electrónico válido.');
+      triggerShake();
       return;
     }
 
     setIsLoading(true);
     try {
-      const res = await api.auth.forgotPassword(email.trim());
+      const res = await api.auth.forgotPassword(cleanEmail);
       if (res && res.status === 'success') {
         setCodeSent(true);
         if (res.code) {
           setGeneratedCodeDisplay(res.code);
           setResetCode(res.code);
-          Alert.alert(
-            '🔑 Código de Recuperación',
-            `Tu código de verificación es:\n\n👉  ${res.code}  👈\n\nHa sido ingresado automáticamente en el formulario. También se envió una notificación a ${email.trim()}.`,
-            [{ text: 'Entendido' }]
-          );
         }
-        setSuccessMessage(res.message || `Código enviado a ${email.trim()}. Ingrésalo a continuación.`);
+        setSuccessMessage('¡Correo enviado! Revisa tu bandeja de entrada y sigue las instrucciones.');
       } else {
-        setErrorMessage('No encontramos ninguna cuenta con ese correo electrónico.');
+        setRecoveryError('No encontramos ninguna cuenta con ese correo electrónico.');
+        triggerShake();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al solicitar el código de recuperación.');
+      setRecoveryError(err.message || 'Error al solicitar el enlace de recuperación.');
+      triggerShake();
     } finally {
       setIsLoading(false);
     }
@@ -359,10 +376,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </TouchableOpacity>
         )}
 
-        {/* Header de la marca con Logo Oficial */}
-        <View style={styles.brandHeader}>
-          <BrandLogo size="large" showSubtitle />
-        </View>
+        {/* Header de la marca con Logo Oficial o Header Cyberpunk para Recuperar Contraseña */}
+        {authMode === 'FORGOT_PASSWORD' ? (
+          <View style={styles.cyberHeaderRow}>
+            <View style={styles.cyberBrandBadge}>
+              <Flame size={18} color="#00F2FE" />
+              <Text style={styles.cyberBrandText}>TexxxNopor</Text>
+            </View>
+            <View style={styles.cyberDivider} />
+            <Text style={styles.cyberHeaderTitle}>Recuperación de cuenta</Text>
+            <View style={{ flex: 1 }} />
+            <View style={styles.cyberSecureBadge}>
+              <View style={styles.cyberPulsingDot} />
+              <Text style={styles.cyberSecureText}>256-BIT</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.brandHeader}>
+            <BrandLogo size="large" showSubtitle />
+          </View>
+        )}
 
         {/* Banner Primer Registro = Admin */}
         {isFirstUserPending && authMode === 'REGISTER' && (
@@ -408,8 +441,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </View>
         )}
 
-        {/* Mensaje de Error con Atajos Inteligentes */}
-        {errorMessage ? (
+        {/* Mensaje de Error con Atajos Inteligentes (Solo para Login y Registro) */}
+        {errorMessage && authMode !== 'FORGOT_PASSWORD' ? (
           <View style={styles.errorBox}>
             <AlertTriangle size={16} color="#FF3B30" />
             <View style={{ flex: 1 }}>
@@ -431,8 +464,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </View>
         ) : null}
 
-        {/* Mensaje de Éxito */}
-        {successMessage ? (
+        {/* Mensaje de Éxito (Solo para Login y Registro) */}
+        {successMessage && authMode !== 'FORGOT_PASSWORD' ? (
           <View style={styles.successBox}>
             <CheckCircle2 size={16} color={COLORS.neonLime} />
             <Text style={styles.successText}>{successMessage}</Text>
@@ -443,139 +476,212 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
         {/* VISTA 1: RECUPERAR CONTRASEÑA CON CÓDIGO DE 6 DÍGITOS */}
         {/* ==================================================== */}
         {authMode === 'FORGOT_PASSWORD' ? (
-          <View style={styles.formCard}>
-            <View style={styles.forgotHeaderRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  setAuthMode('LOGIN');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                style={styles.backToLoginBtn}
-              >
-                <ChevronLeft size={18} color={COLORS.neonLime} />
-                <Text style={styles.backToLoginText}>Volver</Text>
-              </TouchableOpacity>
-              <Text style={styles.forgotCardTitle}>Recuperar Contraseña</Text>
-            </View>
-
-            <Text style={styles.forgotInstruction}>
-              {!codeSent
-                ? 'Ingresa tu correo registrado y te enviaremos un código de verificación de 6 dígitos para crear una nueva contraseña.'
-                : 'Ingresa el código de 6 dígitos y define tu nueva contraseña segura.'}
-            </Text>
-
-            {/* Paso 1: Ingreso de Correo */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Correo electrónico registrado *</Text>
-              <View style={styles.inputWrapper}>
-                <Mail size={16} color="#777780" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ejemplo@correo.com"
-                  placeholderTextColor="#55555C"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!codeSent}
-                />
-              </View>
-            </View>
-
-            {/* Banner con código de prueba en pantalla */}
-            {generatedCodeDisplay && (
-              <View style={styles.codeDisplayCard}>
-                <KeyRound size={20} color={COLORS.neonLime} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.codeDisplayTitle}>Código de Verificación:</Text>
-                  <Text style={styles.codeDisplayNumber}>{generatedCodeDisplay}</Text>
+          <View style={{ width: '100%' }}>
+            {/* Tarjeta de Recuperación con animación Shake */}
+            <Animated.View style={[styles.cyberCard, { transform: [{ translateX: shakeAnim }] }]}>
+              {/* Píldora ACCOUNT RECOVERY */}
+              <View style={styles.cyberPillContainer}>
+                <View style={styles.cyberPill}>
+                  <KeyRound size={12} color="#00F2FE" />
+                  <Text style={styles.cyberPillText}>ACCOUNT RECOVERY</Text>
                 </View>
               </View>
-            )}
 
-            {/* Paso 2: Código y Nueva Contraseña */}
-            {codeSent && (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Código de 6 dígitos *</Text>
-                  <View style={styles.inputWrapper}>
-                    <KeyRound size={16} color="#777780" style={styles.inputIcon} />
-                    <TextInput
-                      style={[styles.input, { letterSpacing: 4, fontWeight: 'bold' }]}
-                      placeholder="123456"
-                      placeholderTextColor="#55555C"
-                      value={resetCode}
-                      onChangeText={setResetCode}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                    />
-                  </View>
+              {/* Título Principal */}
+              <Text style={styles.cyberCardTitle}>
+                {!codeSent ? '¿Olvidaste tu contraseña?' : '¡Correo enviado!'}
+              </Text>
+
+              {/* Descripción */}
+              <Text style={styles.cyberCardDesc}>
+                {!codeSent
+                  ? 'No te preocupes. Ingresa el correo electrónico asociado a tu cuenta y te ayudaremos a recuperar el acceso.'
+                  : `Hemos enviado un enlace y código de recuperación a tu correo electrónico. Revisa tu bandeja de entrada y sigue las instrucciones.`}
+              </Text>
+
+              {/* Campo de Correo Electrónico */}
+              <View style={styles.cyberInputContainer}>
+                <View
+                  style={[
+                    styles.cyberInputWrapper,
+                    recoveryEmailFocused && styles.cyberInputWrapperFocused,
+                    recoveryError ? styles.cyberInputWrapperError : null,
+                  ]}
+                >
+                  <Mail
+                    size={18}
+                    color={recoveryError ? '#FF3366' : recoveryEmailFocused ? '#00F2FE' : '#64748B'}
+                    style={{ marginRight: 10 }}
+                  />
+                  <TextInput
+                    style={styles.cyberTextInput}
+                    placeholder="Ingresa tu correo electrónico"
+                    placeholderTextColor="#64748B"
+                    value={email}
+                    onChangeText={(val) => {
+                      setEmail(val);
+                      if (recoveryError) setRecoveryError('');
+                    }}
+                    onFocus={() => setRecoveryEmailFocused(true)}
+                    onBlur={() => setRecoveryEmailFocused(false)}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    editable={!codeSent && !isLoading}
+                  />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Nueva Contraseña *</Text>
-                  <View style={styles.inputWrapper}>
-                    <Lock size={16} color="#777780" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Mínimo 6 caracteres"
-                      placeholderTextColor="#55555C"
-                      value={newPassword}
-                      onChangeText={setNewPassword}
-                      secureTextEntry
-                    />
+                {/* Mensaje de error discreto */}
+                {recoveryError ? (
+                  <View style={styles.cyberDiscreteError}>
+                    <AlertTriangle size={13} color="#FF3366" />
+                    <Text style={styles.cyberDiscreteErrorText}>{recoveryError}</Text>
                   </View>
-                </View>
+                ) : null}
+              </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Confirmar Nueva Contraseña *</Text>
-                  <View style={styles.inputWrapper}>
-                    <Lock size={16} color="#777780" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Repite la nueva contraseña"
-                      placeholderTextColor="#55555C"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry
-                    />
-                  </View>
-                </View>
-              </>
-            )}
-
-            {/* Botón de acción */}
-            <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-              onPress={!codeSent ? handleRequestResetCode : handleResetPassword}
-              disabled={isLoading}
-              activeOpacity={0.85}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#000000" />
-              ) : (
+              {/* Paso 2: Código y Nueva Contraseña cuando codeSent es true */}
+              {codeSent && (
                 <>
-                  <Text style={styles.submitButtonText}>
-                    {!codeSent ? 'Enviar Código de 6 Dígitos' : 'Cambiar Contraseña'}
-                  </Text>
-                  <ArrowRight size={18} color="#000000" style={{ marginLeft: 6 }} />
+                  {generatedCodeDisplay && (
+                    <View style={styles.cyberCodeDemoBox}>
+                      <KeyRound size={18} color="#00F2FE" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cyberCodeDemoTitle}>Código de verificación:</Text>
+                        <Text style={styles.cyberCodeDemoValue}>{generatedCodeDisplay}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.cyberInputContainer}>
+                    <Text style={styles.cyberInputLabel}>Código de 6 dígitos *</Text>
+                    <View style={styles.cyberInputWrapper}>
+                      <KeyRound size={16} color="#00F2FE" style={{ marginRight: 10 }} />
+                      <TextInput
+                        style={[styles.cyberTextInput, { letterSpacing: 4, fontWeight: 'bold' }]}
+                        placeholder="123456"
+                        placeholderTextColor="#64748B"
+                        value={resetCode}
+                        onChangeText={setResetCode}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.cyberInputContainer}>
+                    <Text style={styles.cyberInputLabel}>Nueva Contraseña *</Text>
+                    <View style={styles.cyberInputWrapper}>
+                      <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
+                      <TextInput
+                        style={styles.cyberTextInput}
+                        placeholder="Mínimo 6 caracteres"
+                        placeholderTextColor="#64748B"
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                        secureTextEntry
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.cyberInputContainer}>
+                    <Text style={styles.cyberInputLabel}>Confirmar Nueva Contraseña *</Text>
+                    <View style={styles.cyberInputWrapper}>
+                      <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
+                      <TextInput
+                        style={styles.cyberTextInput}
+                        placeholder="Repite la nueva contraseña"
+                        placeholderTextColor="#64748B"
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry
+                      />
+                    </View>
+                  </View>
                 </>
               )}
-            </TouchableOpacity>
 
-            {codeSent && (
+              {/* Botón Principal con estado "Enviando..." y Cyan Glow */}
               <TouchableOpacity
+                style={[styles.cyberButton, isLoading && styles.cyberButtonLoading]}
+                onPress={!codeSent ? handleRequestResetCode : handleResetPassword}
+                disabled={isLoading}
+                activeOpacity={0.88}
+              >
+                {isLoading ? (
+                  <View style={styles.cyberButtonLoadingRow}>
+                    <ActivityIndicator size="small" color="#030812" style={{ marginRight: 8 }} />
+                    <Text style={styles.cyberButtonText}>Enviando...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.cyberButtonLoadingRow}>
+                    <Text style={styles.cyberButtonText}>
+                      {!codeSent ? 'Enviar enlace de recuperación' : 'Restablecer contraseña'}
+                    </Text>
+                    <ArrowRight size={17} color="#030812" style={{ marginLeft: 6 }} />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Botón Volver al Inicio de Sesión */}
+              <TouchableOpacity
+                style={styles.cyberBackButton}
                 onPress={() => {
+                  setAuthMode('LOGIN');
+                  setRecoveryError('');
+                  setErrorMessage('');
+                  setSuccessMessage('');
                   setCodeSent(false);
-                  setResetCode('');
                   setGeneratedCodeDisplay(null);
                 }}
-                style={styles.resendCodeBtn}
+                activeOpacity={0.8}
               >
-                <Text style={styles.resendCodeText}>¿No recibiste el código? Solicitar otro</Text>
+                <ChevronLeft size={16} color="#00F2FE" />
+                <Text style={styles.cyberBackButtonText}>Volver al inicio de sesión</Text>
               </TouchableOpacity>
-            )}
+            </Animated.View>
+
+            {/* Módulos Tecnológicos Inferiores */}
+            <View style={styles.cyberTechPanel}>
+              <View style={styles.cyberTechChipsRow}>
+                <View style={styles.cyberTechChip}>
+                  <View style={styles.cyberTechChipDot} />
+                  <Text style={styles.cyberTechChipText}>React Native</Text>
+                </View>
+                <View style={styles.cyberTechChip}>
+                  <View style={styles.cyberTechChipDot} />
+                  <Text style={styles.cyberTechChipText}>JavaScript</Text>
+                </View>
+                <View style={styles.cyberTechChip}>
+                  <View style={styles.cyberTechChipDot} />
+                  <Text style={styles.cyberTechChipText}>CSS3</Text>
+                </View>
+                <View style={styles.cyberTechChip}>
+                  <View style={styles.cyberTechChipDot} />
+                  <Text style={styles.cyberTechChipText}>Animated</Text>
+                </View>
+              </View>
+
+              {/* Mini Terminal con código decorativo */}
+              <View style={styles.cyberTerminal}>
+                <View style={styles.cyberTerminalHeader}>
+                  <View style={styles.cyberTerminalDots}>
+                    <View style={[styles.cyberTerminalDot, { backgroundColor: '#FF5F56' }]} />
+                    <View style={[styles.cyberTerminalDot, { backgroundColor: '#FFBD2E' }]} />
+                    <View style={[styles.cyberTerminalDot, { backgroundColor: '#27C93F' }]} />
+                  </View>
+                  <Text style={styles.cyberTerminalTitle}>RecoveryHandler.tsx</Text>
+                </View>
+                <Text style={styles.cyberTerminalCode}>
+                  <Text style={{ color: '#FF7B72' }}>const </Text>
+                  <Text style={{ color: '#79C0FF' }}>recovery </Text>=
+                  <Text style={{ color: '#FFA657' }}> true</Text>;{'\n'}
+                  <Text style={{ color: '#FF7B72' }}>if </Text>(
+                  <Text style={{ color: '#79C0FF' }}>emailValid</Text>) {'{\n'}
+                  {'  '}<Text style={{ color: '#D2A8FF' }}>sendRecoveryLink</Text>();{'\n'}
+                  {'}'}
+                </Text>
+              </View>
+            </View>
           </View>
         ) : (
           /* ==================================================== */
@@ -1191,5 +1297,299 @@ const styles = StyleSheet.create({
     color: '#B0B0C0',
     fontSize: 11,
     marginTop: 2,
+  },
+
+  // --- ESTILOS CYBERPUNK PARA RECUPERAR CONTRASEÑA (TEXXXNOPOR) ---
+  cyberHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 242, 254, 0.12)',
+  },
+  cyberBrandBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  cyberBrandText: {
+    color: '#00F2FE',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  cyberDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 10,
+  },
+  cyberHeaderTitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cyberSecureBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 5,
+  },
+  cyberPulsingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00F2FE',
+  },
+  cyberSecureText: {
+    color: '#00F2FE',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  cyberCard: {
+    backgroundColor: '#0D1322',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+    padding: 20,
+    shadowColor: '#00F2FE',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  cyberPillContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cyberPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.3)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  cyberPillText: {
+    color: '#00F2FE',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1.2,
+  },
+  cyberCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  cyberCardDesc: {
+    color: '#94A3B8',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  cyberInputContainer: {
+    marginBottom: 16,
+  },
+  cyberInputLabel: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cyberInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0A0F1B',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  cyberInputWrapperFocused: {
+    borderColor: '#00F2FE',
+    backgroundColor: '#0F1829',
+    shadowColor: '#00F2FE',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cyberInputWrapperError: {
+    borderColor: '#FF3366',
+    backgroundColor: '#160B12',
+    shadowColor: '#FF3366',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  cyberTextInput: {
+    flex: 1,
+    color: '#F0F6FC',
+    fontSize: 14,
+    paddingVertical: 10,
+  },
+  cyberDiscreteError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingLeft: 4,
+    gap: 5,
+  },
+  cyberDiscreteErrorText: {
+    color: '#FF3366',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  cyberButton: {
+    backgroundColor: '#00F2FE',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    shadowColor: '#00F2FE',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  cyberButtonLoading: {
+    opacity: 0.85,
+  },
+  cyberButtonLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cyberButtonText: {
+    color: '#030812',
+    fontSize: 14,
+    fontWeight: 'bold',
+    letterSpacing: 0.3,
+  },
+  cyberBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  cyberBackButtonText: {
+    color: '#00F2FE',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  cyberCodeDemoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.3)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+    gap: 10,
+  },
+  cyberCodeDemoTitle: {
+    color: '#94A3B8',
+    fontSize: 10,
+  },
+  cyberCodeDemoValue: {
+    color: '#00F2FE',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 4,
+  },
+  cyberTechPanel: {
+    marginTop: 22,
+    gap: 12,
+  },
+  cyberTechChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  cyberTechChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(13, 19, 34, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.18)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 5,
+  },
+  cyberTechChipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#00F2FE',
+  },
+  cyberTechChipText: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  cyberTerminal: {
+    backgroundColor: '#070A12',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.12)',
+    borderRadius: 10,
+    padding: 12,
+  },
+  cyberTerminalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+    marginBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  cyberTerminalDots: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  cyberTerminalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  cyberTerminalTitle: {
+    color: '#64748B',
+    fontSize: 9,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  cyberTerminalCode: {
+    color: '#CBD5E1',
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

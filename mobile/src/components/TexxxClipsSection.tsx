@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,21 +6,28 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Modal,
 } from 'react-native';
 import { Zap, Play, Eye, Flame, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { VideoItem } from '../types/auth';
+import { TikTokShortsScreen } from '../screens/TikTokShortsScreen';
 
 interface TexxxClipsSectionProps {
   videos: VideoItem[];
   onSelectVideo?: (video: VideoItem) => void;
+  onOpenLive?: () => void;
+  onViewActor?: (actorId?: string, actorName?: string) => void;
 }
 
 export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
   videos,
   onSelectVideo,
+  onOpenLive,
+  onViewActor,
 }) => {
   const { colors } = useTheme();
+  const [activeShortIndex, setActiveShortIndex] = useState<number | null>(null);
 
   if (!videos || videos.length === 0) return null;
 
@@ -55,7 +62,7 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
 
         <TouchableOpacity
           style={styles.seeAllBtn}
-          onPress={() => onSelectVideo && onSelectVideo(clips[0])}
+          onPress={() => setActiveShortIndex(0)}
           activeOpacity={0.7}
         >
           <Text style={[styles.seeAllText, { color: colors.primary }]}>Ver todo</Text>
@@ -80,7 +87,7 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
                 styles.clipCard,
                 { backgroundColor: colors.surfaceCard, borderColor: colors.border },
               ]}
-              onPress={() => onSelectVideo && onSelectVideo(item)}
+              onPress={() => setActiveShortIndex(idx)}
             >
               {/* Imagen Vertical 9:16 */}
               <Image
@@ -128,6 +135,23 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
           );
         })}
       </ScrollView>
+
+      {/* Modal Reproductor Shorts Pantalla Completa estilo TikTok / YouTube Shorts (Imágenes 1 y 2) */}
+      {activeShortIndex !== null && (
+        <Modal
+          visible={true}
+          animationType="fade"
+          onRequestClose={() => setActiveShortIndex(null)}
+        >
+          <TikTokShortsScreen
+            initialVideos={clips}
+            initialIndex={activeShortIndex}
+            onBack={() => setActiveShortIndex(null)}
+            onOpenLive={onOpenLive}
+            onViewActor={onViewActor}
+          />
+        </Modal>
+      )}
     </View>
   );
 };
