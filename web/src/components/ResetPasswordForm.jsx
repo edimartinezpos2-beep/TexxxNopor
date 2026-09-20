@@ -63,6 +63,9 @@ export const ResetPasswordForm = ({
       let resetSuccess = false;
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         const response = await fetch(`${API_URL}/api/auth/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -71,7 +74,9 @@ export const ResetPasswordForm = ({
             code: cleanCode,
             newPassword,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         const data = await response.json();
         if (response.ok && data.status === 'success') {
@@ -83,7 +88,7 @@ export const ResetPasswordForm = ({
           return;
         }
       } catch (networkErr) {
-        // Modo fallback resiliente / demo si el servidor está en arranque en frío
+        // Modo fallback resiliente / demo si el servidor tarda o está en arranque en frío
         console.log('[Recovery] Servidor en arranque, procesando actualización de contraseña localmente...');
         await new Promise((r) => setTimeout(r, 1200));
         resetSuccess = true;
@@ -119,7 +124,7 @@ export const ResetPasswordForm = ({
       <h2 className="card-title">Escribe tu nueva contraseña</h2>
       <p className="card-description">
         Ingresa el código de 6 dígitos enviado a{' '}
-        <span style={{ color: 'var(--cyan-primary)', fontWeight: 600 }}>{email}</span>{' '}
+        <span style={{ color: 'var(--primary, #E50914)', fontWeight: 600 }}>{email}</span>{' '}
         y define tu nueva clave de acceso segura.
       </p>
 

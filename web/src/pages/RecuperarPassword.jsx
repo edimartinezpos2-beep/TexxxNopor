@@ -1,17 +1,16 @@
 import React from 'react';
 import Header from '../components/Header';
 import RecoveryCard from '../components/RecoveryCard';
-import TechPanel from '../components/TechPanel';
 
 /**
  * RecuperarPassword Page Component
- * Main page container with cyber-ambient glow effects,
- * centered card, and bottom developer technology panel.
+ * Main page container with TexxxNopor dark ambient glow effects
+ * and centered recovery card.
  */
 export const RecuperarPassword = ({ onNavigateToLogin }) => {
   return (
     <div className="app-container">
-      {/* Luces de fondo y malla cibernética */}
+      {/* Luces de fondo y ambientación TexxxNopor */}
       <div className="ambient-background">
         <div className="ambient-grid" />
       </div>
@@ -23,9 +22,6 @@ export const RecuperarPassword = ({ onNavigateToLogin }) => {
       <main className="content-center">
         <RecoveryCard onBackToLogin={onNavigateToLogin} />
       </main>
-
-      {/* Paneles tecnológicos inferiores */}
-      <TechPanel />
     </div>
   );
 };

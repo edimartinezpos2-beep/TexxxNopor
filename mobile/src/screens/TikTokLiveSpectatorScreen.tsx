@@ -56,6 +56,24 @@ const GIFT_CATALOG: GiftOption[] = [
   { id: 'g_car', name: 'Deportivo', icon: '🏎️', coins: 3000, effect: 'sports_car' },
 ];
 
+export interface CoinPackage {
+  id: string;
+  coins: number;
+  bonus: number;
+  priceCOP: string;
+  priceUSD: string;
+  popular?: boolean;
+}
+
+export const COIN_PACKAGES: CoinPackage[] = [
+  { id: 'p_70', coins: 70, bonus: 0, priceCOP: '3.500', priceUSD: '0.99', popular: false },
+  { id: 'p_350', coins: 350, bonus: 0, priceCOP: '17.500', priceUSD: '4.99', popular: false },
+  { id: 'p_700', coins: 700, bonus: 35, priceCOP: '35.000', priceUSD: '9.99', popular: true },
+  { id: 'p_1400', coins: 1400, bonus: 100, priceCOP: '70.000', priceUSD: '19.99', popular: false },
+  { id: 'p_3500', coins: 3500, bonus: 350, priceCOP: '175.000', priceUSD: '49.99', popular: false },
+  { id: 'p_7000', coins: 7000, bonus: 1000, priceCOP: '350.000', priceUSD: '99.99', popular: false },
+];
+
 interface ChatMessage {
   id: string;
   user: string;
@@ -104,6 +122,10 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
   const [viewersCount, setViewersCount] = useState<number>(stream.viewersCount || 13);
   const [inputText, setInputText] = useState('');
   const [showGiftModal, setShowGiftModal] = useState(false);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<CoinPackage>(COIN_PACKAGES[2]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'NEQUI' | 'BANCOLOMBIA' | 'PSE' | 'TARJETA'>('NEQUI');
+  const [rechargeToast, setRechargeToast] = useState<string | null>(null);
   const [userCoins, setUserCoins] = useState(250);
   const [selectedGift, setSelectedGift] = useState<GiftOption>(GIFT_CATALOG[0]);
   const [activeGiftCelebration, setActiveGiftCelebration] = useState<{
@@ -237,17 +259,39 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
     handleSendGift(roseGift);
   };
 
-  // Enviar cualquier regalo del catálogo
+  // Confirmar recarga de monedas
+  const handleConfirmRecharge = () => {
+    const totalCoinsAdded = selectedPackage.coins + selectedPackage.bonus;
+    setUserCoins((prev) => prev + totalCoinsAdded);
+    setRechargeToast(`¡Recarga exitosa! +${totalCoinsAdded} monedas acreditadas.`);
+    setShowRechargeModal(false);
+    setTimeout(() => setRechargeToast(null), 3500);
+
+    if (userToken) {
+      api.live.rechargeCoins?.(userToken, totalCoinsAdded, parseInt(selectedPackage.priceCOP.replace('.', ''), 10)).catch(() => {});
+    }
+  };
+
+  // Enviar cualquier regalo del catálogo (92% para el actor / 8% para la plataforma)
   const handleSendGift = (giftItem: GiftOption) => {
-    // Reducir monedas
+    if (userCoins < giftItem.coins) {
+      setShowGiftModal(false);
+      setShowRechargeModal(true);
+      return;
+    }
+
+    // Reducir monedas del espectador
     setUserCoins((c) => Math.max(0, c - giftItem.coins));
     setLikesCount((c) => c + giftItem.coins * 15);
+
+    const actorCoins = Math.round(giftItem.coins * 0.92);
+    const platformCoins = Math.round(giftItem.coins * 0.08);
 
     // Mensaje en chat
     const giftMsg: ChatMessage = {
       id: String(Date.now()),
       user: user?.username || 'Tú',
-      text: `ha enviado ${giftItem.name} ${giftItem.icon}`,
+      text: `ha enviado ${giftItem.name} ${giftItem.icon} (92% para el actor: +${actorCoins} monedas)`,
       isGift: true,
       giftIcon: giftItem.icon,
       giftName: giftItem.name,
@@ -257,7 +301,7 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
     // Celebración visual en pantalla completa
     setActiveGiftCelebration({
       icon: giftItem.icon,
-      name: giftItem.name,
+      name: `${giftItem.name} (+${actorCoins} al actor)`,
       sender: user?.username || 'Tú',
     });
     setTimeout(() => {
@@ -559,14 +603,28 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
               <View style={styles.giftModalHeader}>
                 <View style={styles.giftCoinsBalanceRow}>
                   <Coins size={18} color="#FFD700" style={{ marginRight: 6 }} />
-                  <Text style={styles.giftCoinsText}>{userCoins}</Text>
-                  <TouchableOpacity style={styles.rechargeBtn}>
-                    <Text style={styles.rechargeBtnText}>Recargar</Text>
+                  <Text style={styles.giftCoinsText}>{userCoins} monedas</Text>
+                  <TouchableOpacity
+                    style={styles.rechargeBtn}
+                    onPress={() => {
+                      setShowGiftModal(false);
+                      setShowRechargeModal(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.rechargeBtnText}>+ Recargar</Text>
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity onPress={() => setShowGiftModal(false)}>
                   <X size={20} color="#FFFFFF" />
                 </TouchableOpacity>
+              </View>
+
+              {/* Banner Informativo de Reparto de Ingresos (92% Actor / 8% Plataforma) */}
+              <View style={styles.giftRevenueSharePill}>
+                <Text style={styles.giftRevenueShareText}>
+                  ✨ 92% de tu regalo apoya directamente al actor como ingreso extra (8% comisión TexxxNopor)
+                </Text>
               </View>
 
               {/* Grid de Regalos */}
@@ -603,7 +661,7 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
                   <View>
                     <Text style={styles.selectedGiftName}>{selectedGift.name}</Text>
                     <Text style={styles.selectedGiftCost}>
-                      Costo: {selectedGift.coins} monedas
+                      Costo: {selectedGift.coins} monedas · Actor recibe: {Math.round(selectedGift.coins * 0.92)}
                     </Text>
                   </View>
                 </View>
@@ -616,13 +674,123 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
                   onPress={() => handleSendGift(selectedGift)}
                 >
                   <Text style={styles.sendGiftActionText}>
-                    {userCoins < selectedGift.coins ? 'Sin saldo' : 'Enviar'}
+                    {userCoins < selectedGift.coins ? 'Recargar monedas' : 'Enviar'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         </Modal>
+      )}
+
+      {/* MODAL DE RECARGA DE MONEDAS CON COSTO REAL (COP) */}
+      {showRechargeModal && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowRechargeModal(false)}
+        >
+          <View style={styles.giftModalBackdrop}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => setShowRechargeModal(false)}
+            />
+            <View style={styles.rechargeModalContent}>
+              <View style={styles.rechargeModalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Coins size={22} color="#FFD700" style={{ marginRight: 8 }} />
+                  <Text style={styles.rechargeModalTitle}>Recargar Monedas</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowRechargeModal(false)}>
+                  <X size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.rechargeSubtitle}>
+                Saldo actual: <Text style={{ color: '#FFD700', fontWeight: 'bold' }}>{userCoins} monedas</Text>.
+                Tus monedas se usan para enviar regalos a los actores y apoyarlos en sus transmisiones.
+              </Text>
+
+              {/* Lista de Paquetes de Monedas */}
+              <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.rechargePackagesGrid}>
+                  {COIN_PACKAGES.map((pkg) => {
+                    const isSelected = selectedPackage.id === pkg.id;
+                    return (
+                      <TouchableOpacity
+                        key={pkg.id}
+                        style={[
+                          styles.packageCard,
+                          isSelected && styles.packageCardSelected,
+                        ]}
+                        onPress={() => setSelectedPackage(pkg)}
+                        activeOpacity={0.8}
+                      >
+                        {pkg.popular && (
+                          <View style={styles.popularBadge}>
+                            <Text style={styles.popularBadgeText}>MÁS POPULAR</Text>
+                          </View>
+                        )}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                          <Coins size={16} color="#FFD700" style={{ marginRight: 5 }} />
+                          <Text style={styles.packageCoinsText}>{pkg.coins}</Text>
+                          {pkg.bonus > 0 && (
+                            <Text style={styles.packageBonusText}>+{pkg.bonus}</Text>
+                          )}
+                        </View>
+                        <Text style={styles.packagePriceText}>${pkg.priceCOP} COP</Text>
+                        <Text style={styles.packageUsdText}>(${pkg.priceUSD} USD)</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              {/* Selector de Método de Pago */}
+              <Text style={styles.paymentMethodLabel}>Método de Pago:</Text>
+              <View style={styles.paymentMethodsRow}>
+                {(['NEQUI', 'BANCOLOMBIA', 'PSE', 'TARJETA'] as const).map((method) => (
+                  <TouchableOpacity
+                    key={method}
+                    style={[
+                      styles.paymentMethodPill,
+                      selectedPaymentMethod === method && styles.paymentMethodPillActive,
+                    ]}
+                    onPress={() => setSelectedPaymentMethod(method)}
+                  >
+                    <Text
+                      style={[
+                        styles.paymentMethodText,
+                        selectedPaymentMethod === method && styles.paymentMethodTextActive,
+                      ]}
+                    >
+                      {method}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Botón de Confirmación de Recarga */}
+              <TouchableOpacity
+                style={styles.confirmRechargeBtn}
+                onPress={handleConfirmRecharge}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.confirmRechargeBtnText}>
+                  Pagar ${selectedPackage.priceCOP} COP y Obtener {selectedPackage.coins + selectedPackage.bonus} Monedas
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Toast de Recarga Exitosa */}
+      {rechargeToast && (
+        <View style={styles.rechargeSuccessToast}>
+          <Text style={styles.rechargeSuccessToastText}>{rechargeToast}</Text>
+        </View>
       )}
     </View>
   );
@@ -1114,6 +1282,168 @@ const styles = StyleSheet.create({
   sendGiftActionText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  giftRevenueSharePill: {
+    backgroundColor: 'rgba(255, 45, 85, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 45, 85, 0.3)',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+  },
+  giftRevenueShareText: {
+    color: '#FF7B92',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // ---------------------------------------------------------
+  // MODAL DE RECARGA DE MONEDAS
+  // ---------------------------------------------------------
+  rechargeModalContent: {
+    backgroundColor: '#161622',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.25)',
+  },
+  rechargeModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  rechargeModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  rechargeSubtitle: {
+    color: '#A0A0B0',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+  rechargePackagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  packageCard: {
+    width: '48%',
+    backgroundColor: '#1E1E2C',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    position: 'relative',
+    alignItems: 'center',
+  },
+  packageCardSelected: {
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+  },
+  popularBadge: {
+    position: 'absolute',
+    top: -8,
+    right: 8,
+    backgroundColor: '#FF2D55',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  popularBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  packageCoinsText: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  packageBonusText: {
+    color: '#30D158',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  packagePriceText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  packageUsdText: {
+    color: '#8E8E98',
+    fontSize: 10,
+  },
+  paymentMethodLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  paymentMethodsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  paymentMethodPill: {
+    flex: 1,
+    backgroundColor: '#20202E',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  paymentMethodPillActive: {
+    borderColor: '#FF2D55',
+    backgroundColor: 'rgba(255, 45, 85, 0.18)',
+  },
+  paymentMethodText: {
+    color: '#A0A0B0',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  paymentMethodTextActive: {
+    color: '#FFFFFF',
+  },
+  confirmRechargeBtn: {
+    backgroundColor: '#E50914',
+    borderRadius: 16,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmRechargeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  rechargeSuccessToast: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(48, 209, 88, 0.95)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    zIndex: 99,
+  },
+  rechargeSuccessToastText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });

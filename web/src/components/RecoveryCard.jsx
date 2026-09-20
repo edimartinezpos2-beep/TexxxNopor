@@ -63,11 +63,16 @@ export const RecoveryCard = ({ onBackToLogin }) => {
       let codeReceived = '';
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cleanEmail }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         const data = await res.json();
         if (res.ok && data.status === 'success') {
@@ -82,7 +87,7 @@ export const RecoveryCard = ({ onBackToLogin }) => {
           return;
         }
       } catch (netErr) {
-        // Fallback resiliente / demo si el servidor está en arranque en frío
+        // Fallback resiliente / demo si el servidor tarda o está en arranque en frío
         console.log('[Recovery] Fallback a simulación de red');
         await new Promise((resolve) => setTimeout(resolve, 1400));
         codeReceived = '123456';

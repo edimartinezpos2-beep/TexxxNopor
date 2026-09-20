@@ -110,14 +110,59 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   const [incomingComments, setIncomingComments] = useState<{ id: string; user: string; text: string }[]>([]);
   const [recentGiftPopup, setRecentGiftPopup] = useState<{ user: string; gift: string; icon: string } | null>(null);
 
-  // Modal de Resumen al Finalizar
+  // Modal de Resumen al Finalizar con Desglose 92% Actor / 8% Plataforma
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryStats, setSummaryStats] = useState<{
     duration: string;
     viewers: number;
     diamonds: number;
     followers: number;
+    actorEarningsCOP?: number;
+    platformFeeCOP?: number;
+    actorEarnedCoins?: number;
+    platformFeeCoins?: number;
   } | null>(null);
+
+  // Estados de Cámara del Dispositivo (Frontal / Trasera)
+  const [cameraActive, setCameraActive] = useState(false);
+  const webVideoRef = useRef<any>(null);
+  const mediaStreamRef = useRef<any>(null);
+
+  const setupCamera = async (front: boolean) => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      try {
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((t: any) => t.stop());
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: front ? 'user' : 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        mediaStreamRef.current = stream;
+        if (webVideoRef.current) {
+          webVideoRef.current.srcObject = stream;
+          webVideoRef.current.play().catch(() => {});
+        }
+        setCameraActive(true);
+      } catch (e: any) {
+        console.log('[Camera] Vista con preview HD simulado:', e.message);
+        setCameraActive(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    setupCamera(isFrontCamera);
+    return () => {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t: any) => t.stop());
+      }
+    };
+  }, [isFrontCamera]);
 
   // Cronómetro del Live cuando se está emitiendo
   useEffect(() => {
@@ -217,10 +262,17 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         style: 'destructive',
         onPress: () => {
           setIsBroadcasting(false);
+          const totalCoins = Math.max(diamondsEarned, 24);
+          const actorCoins = Math.round(totalCoins * 0.92);
+          const platformCoins = Math.round(totalCoins * 0.08);
           const stats = {
             duration: formatTime(liveDurationSeconds),
             viewers: Math.max(spectatorsCount, 45),
-            diamonds: Math.max(diamondsEarned, 24),
+            diamonds: totalCoins,
+            actorEarningsCOP: actorCoins * 50,
+            platformFeeCOP: platformCoins * 50,
+            actorEarnedCoins: actorCoins,
+            platformFeeCoins: platformCoins,
             followers: Math.floor(Math.random() * 12) + 3,
           };
           setSummaryStats(stats);
@@ -232,8 +284,10 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
 
   // Alternar Giro de Cámara (Cámara frontal / trasera)
   const handleFlipCamera = () => {
-    setIsFrontCamera(!isFrontCamera);
-    setIsMirrored(!isMirrored);
+    const nextFront = !isFrontCamera;
+    setIsFrontCamera(nextFront);
+    setIsMirrored(nextFront);
+    setupCamera(nextFront);
   };
 
   // Agregar palabra bloqueada
@@ -258,18 +312,37 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   if (isBroadcasting) {
     return (
       <View style={styles.container}>
-        {/* Fondo de Transmisión en Vivo */}
-        <Video
-          source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
-          style={[
-            styles.cameraPreviewVideo,
-            isMirrored && { transform: [{ scaleX: -1 }] },
-          ]}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay
-          isLooping
-          isMuted
-        />
+        {/* Fondo de Transmisión en Vivo: Cámara real o preview HD */}
+        {Platform.OS === 'web' && cameraActive ? (
+          <video
+            ref={webVideoRef as any}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: isMirrored ? 'scaleX(-1)' : 'none',
+              zIndex: 1,
+            } as any}
+          />
+        ) : (
+          <Video
+            source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
+            style={[
+              styles.cameraPreviewVideo,
+              isMirrored && { transform: [{ scaleX: -1 }] },
+            ]}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay
+            isLooping
+            isMuted
+          />
+        )}
         <View style={[styles.filterOverlay, getFilterStyle()]} />
 
         {/* Cabecera del Estudio de Transmisión */}
@@ -352,7 +425,9 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
             onPress={handleFlipCamera}
           >
             <RotateCcw size={20} color="#FFFFFF" />
-            <Text style={styles.studioToolLabel}>Girar</Text>
+            <Text style={styles.studioToolLabel}>
+              {isFrontCamera ? 'Frontal' : 'Trasera'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -403,17 +478,36 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   return (
     <View style={styles.container}>
       {/* Vista Previa de Cámara en Vivo con Fallback HD */}
-      <Video
-        source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
-        style={[
-          styles.cameraPreviewVideo,
-          isMirrored && { transform: [{ scaleX: -1 }] },
-        ]}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay
-        isLooping
-        isMuted
-      />
+      {Platform.OS === 'web' && cameraActive ? (
+        <video
+          ref={webVideoRef as any}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transform: isMirrored ? 'scaleX(-1)' : 'none',
+            zIndex: 1,
+          } as any}
+        />
+      ) : (
+        <Video
+          source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
+          style={[
+            styles.cameraPreviewVideo,
+            isMirrored && { transform: [{ scaleX: -1 }] },
+          ]}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay
+          isLooping
+          isMuted
+        />
+      )}
       <View style={[styles.filterOverlay, getFilterStyle()]} />
 
       {/* 1. Barra Superior con Botón Cerrar "X", Recompensas y Ajustes */}
@@ -425,7 +519,19 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         {/* Píldora de Recompensas LIVE */}
         <TouchableOpacity style={styles.topRewardsPill}>
           <Text style={{ fontSize: 13, marginRight: 5 }}>💰</Text>
-          <Text style={styles.topRewardsText}>Recompensas LIVE escalonadas</Text>
+          <Text style={styles.topRewardsText}>92% Actor / 8% Plataforma</Text>
+        </TouchableOpacity>
+
+        {/* Píldora de Selección de Cámara (Frontal / Trasera) */}
+        <TouchableOpacity
+          style={styles.cameraSwitchPill}
+          onPress={handleFlipCamera}
+          activeOpacity={0.8}
+        >
+          <RotateCcw size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+          <Text style={styles.cameraSwitchPillText}>
+            {isFrontCamera ? 'Frontal' : 'Trasera'}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.topRightIconsRow}>
@@ -462,7 +568,7 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
       <View style={styles.toolsGridContainer}>
         {/* Fila 1 */}
         <View style={styles.toolsRow}>
-          {/* Girar */}
+          {/* Girar Cámara */}
           <TouchableOpacity
             style={styles.toolGridItem}
             onPress={handleFlipCamera}
@@ -471,7 +577,9 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
             <View style={styles.toolIconCircle}>
               <RotateCcw size={24} color="#FFFFFF" />
             </View>
-            <Text style={styles.toolGridLabel}>Girar</Text>
+            <Text style={styles.toolGridLabel}>
+              {isFrontCamera ? 'Cam. Frontal' : 'Cam. Trasera'}
+            </Text>
           </TouchableOpacity>
 
           {/* Mejorar */}
@@ -667,19 +775,12 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         </TouchableOpacity>
       </View>
 
-      {/* 5. Barra Inferior Estilo TikTok: PUBLICAR | CREAR | LIVE */}
+      {/* 5. Selector de Modo: Solo LIVE (Se eliminaron PUBLICAR y CREAR) */}
       <View style={styles.preLiveBottomNavBar}>
-        <TouchableOpacity style={styles.navBarTextBtn} onPress={onClose}>
-          <Text style={styles.navBarInactiveText}>PUBLICAR</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navBarTextBtn} onPress={onClose}>
-          <Text style={styles.navBarInactiveText}>CREAR</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navBarTextBtn}>
+        <View style={styles.navBarOnlyLivePill}>
+          <View style={styles.liveRedIndicatorDot} />
           <Text style={styles.navBarActiveText}>LIVE</Text>
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* ========================================================================= */}
@@ -916,6 +1017,24 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
                     +{summaryStats.followers}
                   </Text>
                   <Text style={styles.summaryMetricLabel}>Nuevos seguidores</Text>
+                </View>
+              </View>
+
+              {/* Desglose Financiero: 92% para el Actor / 8% Comisión Plataforma */}
+              <View style={styles.summaryEarningsCard}>
+                <View style={styles.summaryEarningsMainRow}>
+                  <Text style={styles.summaryEarningsTitle}>💰 Tus Ganancias Netas (92%)</Text>
+                  <Text style={styles.summaryEarningsAmount}>
+                    ${((summaryStats.actorEarningsCOP || 0)).toLocaleString()} COP
+                  </Text>
+                </View>
+                <Text style={styles.summaryEarningsCoins}>
+                  Equivalente a {summaryStats.actorEarnedCoins || 0} monedas acreditadas a tu cuenta
+                </Text>
+                <View style={styles.summaryCommissionRow}>
+                  <Text style={styles.summaryCommissionText}>
+                    * Retención de comisión plataforma TexxxNopor (8%): ${((summaryStats.platformFeeCOP || 0)).toLocaleString()} COP ({summaryStats.platformFeeCoins || 0} monedas)
+                  </Text>
                 </View>
               </View>
 
@@ -1310,14 +1429,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 48,
+    height: 52,
     backgroundColor: '#000000',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     borderTopWidth: 0.5,
     borderTopColor: '#1A1A22',
     zIndex: 25,
+  },
+  navBarOnlyLivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 45, 85, 0.2)',
+    paddingVertical: 6,
+    paddingHorizontal: 24,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#FF2D55',
+    gap: 8,
+  },
+  liveRedIndicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF2D55',
   },
   navBarTextBtn: {
     paddingVertical: 6,
@@ -1333,6 +1469,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.8,
+  },
+  cameraSwitchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  cameraSwitchPillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  summaryEarningsCard: {
+    backgroundColor: 'rgba(255, 45, 85, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 45, 85, 0.35)',
+    borderRadius: 12,
+    padding: 12,
+    marginVertical: 12,
+  },
+  summaryEarningsMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  summaryEarningsTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  summaryEarningsAmount: {
+    color: '#30D158',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  summaryEarningsCoins: {
+    color: '#FFD700',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  summaryCommissionRow: {
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingTop: 6,
+  },
+  summaryCommissionText: {
+    color: '#A0A0B0',
+    fontSize: 10,
+    lineHeight: 14,
   },
 
   // ---------------------------------------------------------

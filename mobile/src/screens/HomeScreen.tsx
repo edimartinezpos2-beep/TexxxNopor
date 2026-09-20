@@ -115,8 +115,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, []);
 
   const handleDownloadApk = () => {
-    const downloadUrl =
-      'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+    const downloadUrl = api.app ? api.app.getDownloadUrl() : 'https://texxxnopor-backend.onrender.com/api/app/download-apk';
     Linking.openURL(downloadUrl).catch(() => {});
   };
 

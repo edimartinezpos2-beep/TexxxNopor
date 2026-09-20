@@ -281,6 +281,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email }),
         throwOnError: true,
+        timeoutMs: 8000,
       });
     },
 
@@ -289,6 +290,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, code }),
         throwOnError: true,
+        timeoutMs: 8000,
       });
     },
 
@@ -301,6 +303,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, code, newPassword }),
         throwOnError: true,
+        timeoutMs: 8000,
       });
     },
   },
@@ -1974,7 +1977,15 @@ export const api = {
       }
     },
 
-    async sendGift(token: string | null, liveId: string, giftName: string, coins: number): Promise<boolean> {
+    async sendGift(
+      token: string | null,
+      liveId: string,
+      giftName: string,
+      coins: number
+    ): Promise<{ actorEarnedCoins: number; platformCommissionCoins: number }> {
+      const actorEarnedCoins = Math.round(coins * 0.92);
+      const platformCommissionCoins = Math.round(coins * 0.08);
+
       const live = localLives.find((l) => l.id === liveId);
       if (live) {
         live.likesCount = (live.likesCount || 0) + coins * 10;
@@ -1986,7 +1997,18 @@ export const api = {
         await apiFetch(`/api/live/${liveId}/gift`, {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: JSON.stringify({ giftName, coins }),
+          body: JSON.stringify({ giftName, coins, actorEarnedCoins, platformCommissionCoins }),
+        });
+      } catch (_) {}
+      return { actorEarnedCoins, platformCommissionCoins };
+    },
+
+    async rechargeCoins(token: string | null, coinsAmount: number, priceCOP: number): Promise<boolean> {
+      try {
+        await apiFetch('/api/wallet/recharge-coins', {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: JSON.stringify({ coinsAmount, priceCOP }),
         });
       } catch (_) {}
       return true;

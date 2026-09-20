@@ -46,7 +46,7 @@ export function App() {
             <header className="header-wrapper">
               <div className="header-brand">
                 <div className="brand-logo-badge">
-                  <Flame size={20} color="#00F2FE" />
+                  <Flame size={20} color="#E50914" />
                   <span className="brand-logo-text">TexxxNopor</span>
                 </div>
                 <div className="brand-divider" />

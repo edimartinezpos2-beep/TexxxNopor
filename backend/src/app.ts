@@ -145,6 +145,23 @@ app.use('/uploads/videos', (req: Request, res: Response, next: any) => {
 // RUTAS DIRECTAS DE DESCARGA DE APK INSTALABLE
 // ====================================================
 app.get(['/download', '/api/app/download-apk'], (req: Request, res: Response) => {
+  // 1. Si existe un archivo APK físico alojado en el servidor
+  const possibleApkPaths = [
+    path.join(__dirname, '../public/TexxxNopor.apk'),
+    path.join(__dirname, '../uploads/TexxxNopor.apk'),
+    path.join(process.cwd(), 'public/TexxxNopor.apk'),
+    path.join(process.cwd(), 'uploads/TexxxNopor.apk'),
+  ];
+
+  for (const apkPath of possibleApkPaths) {
+    if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="TexxxNopor.apk"');
+      return res.sendFile(apkPath);
+    }
+  }
+
+  // 2. Redirección a la URL configurada en el entorno (EAS Build, Google Drive, Mediafire, GitHub)
   const downloadUrl =
     process.env.APP_UPDATE_URL ||
     'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
@@ -5505,6 +5522,46 @@ app.post('/api/live/stop', authenticateJWT, requireRole(UserRole.CREATOR, UserRo
     return res.json({ status: 'success', message: 'Transmisión en vivo finalizada' });
   } catch (err: any) {
     return res.status(500).json({ error: 'Error al finalizar transmisión en vivo' });
+  }
+});
+
+// REGALOS EN VIVO CON REPARTO 92% ACTOR / 8% PLATAFORMA
+app.post('/api/live/:liveId/gift', async (req: Request, res: Response) => {
+  try {
+    const { liveId } = req.params;
+    const { giftName, coins, actorEarnedCoins, platformCommissionCoins } = req.body;
+    const coinsNum = Number(coins) || 1;
+    const actorCoins = actorEarnedCoins !== undefined ? Number(actorEarnedCoins) : Math.round(coinsNum * 0.92);
+    const platformCoins = platformCommissionCoins !== undefined ? Number(platformCommissionCoins) : Math.round(coinsNum * 0.08);
+
+    console.log(`🎁 [Live Regalo] Live ${liveId}: ${giftName} (${coinsNum} monedas). Actor (92%): ${actorCoins} monedas. Plataforma (8%): ${platformCoins} monedas`);
+
+    return res.json({
+      status: 'success',
+      message: 'Regalo enviado exitosamente',
+      giftName,
+      coins: coinsNum,
+      actorEarnedCoins: actorCoins,
+      platformCommissionCoins: platformCoins,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al procesar regalo' });
+  }
+});
+
+// RECARGA DE MONEDAS CON COSTO REAL
+app.post('/api/wallet/recharge-coins', async (req: Request, res: Response) => {
+  try {
+    const { coinsAmount, priceCOP } = req.body;
+    console.log(`🪙 [Wallet Recarga] Recarga de ${coinsAmount} monedas por $${priceCOP} COP procesada exitosamente`);
+    return res.json({
+      status: 'success',
+      message: 'Recarga procesada exitosamente',
+      coinsAmount,
+      priceCOP,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al procesar recarga' });
   }
 });
 

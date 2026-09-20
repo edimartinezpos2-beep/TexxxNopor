@@ -24,6 +24,7 @@ import {
   Share2,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
   X,
   Plus,
   Check,
@@ -60,9 +61,9 @@ const FALLBACK_SHORTS: VideoItem[] = [
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
     duration: '0:45',
     durationSeconds: 45,
-    views: '740.8K',
-    likesCount: 740800,
-    commentsCount: 7900,
+    views: '0',
+    likesCount: 0,
+    commentsCount: 0,
     thumbnailUrl:
       'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop',
     videoUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
@@ -85,9 +86,9 @@ const FALLBACK_SHORTS: VideoItem[] = [
       'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop',
     duration: '0:32',
     durationSeconds: 32,
-    views: '5 mil',
-    likesCount: 5200,
-    commentsCount: 23,
+    views: '0',
+    likesCount: 0,
+    commentsCount: 0,
     thumbnailUrl:
       'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&auto=format&fit=crop',
     videoUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
@@ -110,9 +111,9 @@ const FALLBACK_SHORTS: VideoItem[] = [
       'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=200&auto=format&fit=crop',
     duration: '0:28',
     durationSeconds: 28,
-    views: '128K',
-    likesCount: 48900,
-    commentsCount: 420,
+    views: '0',
+    likesCount: 0,
+    commentsCount: 0,
     thumbnailUrl:
       'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&auto=format&fit=crop',
     videoUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
@@ -122,7 +123,7 @@ const FALLBACK_SHORTS: VideoItem[] = [
     isNew: true,
     isShort: true,
     aspectRatio: '9:16',
-    isLiked: true,
+    isLiked: false,
     isSaved: false,
   },
 ];
@@ -167,9 +168,11 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
   const [progress, setProgress] = useState(0);
   const [isLiked, setIsLiked] = useState(currentVideo?.isLiked || false);
   const [likesCount, setLikesCount] = useState<number>(
-    typeof currentVideo?.likesCount === 'number' ? currentVideo.likesCount : 740800
+    typeof currentVideo?.likesCount === 'number' ? currentVideo.likesCount : 0
   );
   const [isSaved, setIsSaved] = useState(currentVideo?.isSaved || false);
+  const [bookmarksCount, setBookmarksCount] = useState<number>(0);
+  const [sharesCount, setSharesCount] = useState<number>(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
@@ -177,32 +180,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
   const [showComments, setShowComments] = useState(false);
   const [commentsList, setCommentsList] = useState<
     { id: string; user: string; text: string; time: string; likes: number; avatar: string }[]
-  >([
-    {
-      id: 'c1',
-      user: 'maria_g',
-      text: 'Excelente explicación, súper claro y profesional!',
-      time: 'hace 2h',
-      likes: 142,
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop',
-    },
-    {
-      id: 'c2',
-      user: 'carlos_vip',
-      text: 'Me encanta tu contenido, esperando el próximo video 🔥',
-      time: 'hace 4h',
-      likes: 89,
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop',
-    },
-    {
-      id: 'c3',
-      user: 'daniela_fit',
-      text: 'Hermosa como siempre 😍 saludos desde Colombia',
-      time: 'hace 6h',
-      likes: 24,
-      avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop',
-    },
-  ]);
+  >([]);
   const [newCommentText, setNewCommentText] = useState('');
 
   // Animación del disco de vinilo rotatorio
@@ -225,14 +203,20 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
     outputRange: ['0deg', '360deg'],
   });
 
-  // Animación de doble tap de Me Gusta
+  // Animación de doble tap de Me Gusta y Single Tap para Pausar/Reanudar
   const [floatingHearts, setFloatingHearts] = useState<{ id: number; x: number; y: number }[]>([]);
   const lastTapRef = useRef<number>(0);
+  const tapTimeoutRef = useRef<any>(null);
 
-  const handleDoubleTap = (event: any) => {
+  const handleVideoPress = (event: any) => {
     const now = Date.now();
-    const DOUBLE_PRESS_DELAY = 300;
+    const DOUBLE_PRESS_DELAY = 280;
     if (now - lastTapRef.current < DOUBLE_PRESS_DELAY) {
+      // Doble tap -> Me Gusta
+      if (tapTimeoutRef.current) {
+        clearTimeout(tapTimeoutRef.current);
+        tapTimeoutRef.current = null;
+      }
       if (!isLiked) {
         setIsLiked(true);
         setLikesCount((c) => c + 1);
@@ -246,20 +230,27 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
       setTimeout(() => {
         setFloatingHearts((prev) => prev.filter((h) => h.id !== heartId));
       }, 1000);
+    } else {
+      // Tap simple -> Pausa / Reproducción
+      tapTimeoutRef.current = setTimeout(() => {
+        setIsPlaying((p) => !p);
+      }, DOUBLE_PRESS_DELAY);
     }
     lastTapRef.current = now;
   };
+
+  const handleDoubleTap = handleVideoPress;
 
   // Sincronizar estado cuando cambia el video
   useEffect(() => {
     if (currentVideo) {
       setIsLiked(!!currentVideo.isLiked);
       setLikesCount(
-        typeof currentVideo.likesCount === 'number'
-          ? currentVideo.likesCount
-          : 740800
+        typeof currentVideo.likesCount === 'number' ? currentVideo.likesCount : 0
       );
       setIsSaved(!!currentVideo.isSaved);
+      setBookmarksCount(0);
+      setSharesCount(0);
       setShowFullDesc(false);
       setProgress(0);
     }
@@ -340,10 +331,13 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
   };
 
   const handleToggleSave = () => {
-    setIsSaved(!isSaved);
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+    setBookmarksCount((c) => (nextSaved ? c + 1 : Math.max(0, c - 1)));
   };
 
   const handleShare = async () => {
+    setSharesCount((c) => c + 1);
     try {
       await Share.share({
         message: `Mira este Short de ${currentVideo?.creatorName || 'TexxxNopor'}: ${currentVideo?.title}`,
@@ -699,7 +693,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
         {/* Video a Pantalla Completa Vertical */}
         <TouchableOpacity
           activeOpacity={1}
-          onPress={handleDoubleTap}
+          onPress={handleVideoPress}
           style={styles.mobileVideoTouchWrapper}
         >
           <Video
@@ -723,7 +717,9 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
 
           {!isPlaying && (
             <View style={styles.mobilePlayPauseIndicator}>
-              <Play size={54} color="rgba(255,255,255,0.7)" fill="rgba(255,255,255,0.7)" />
+              <View style={styles.playPauseCircleBg}>
+                <Play size={44} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+              </View>
             </View>
           )}
 
@@ -737,50 +733,39 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
           ))}
         </TouchableOpacity>
 
-        {/* 1. Header Superior Móvil */}
+        {/* 1. Header Superior Móvil: Solo "Para ti" con botón volver a la izquierda */}
         <View style={styles.mobileHeaderBar}>
           <TouchableOpacity
-            style={styles.mobileLiveButton}
-            onPress={() => onOpenLive && onOpenLive()}
+            style={styles.mobileBackBtn}
+            onPress={onBack}
+            activeOpacity={0.8}
           >
-            <Tv size={18} color="#FFFFFF" />
-            <Text style={styles.mobileLiveText}>LIVE</Text>
+            <ChevronLeft size={28} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.mobileTabsContainer}>
-            <TouchableOpacity style={styles.mobileTabItem}>
-              <Text style={styles.mobileTabInactiveText}>Siguiendo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.mobileTabItem}>
-              <Text style={styles.mobileTabInactiveText}>Amigos</Text>
-              <View style={styles.mobileFriendsRedBadge}>
-                <Text style={styles.mobileFriendsBadgeText}>28</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.mobileTabItemActive}>
+            <View style={styles.mobileTabItemActive}>
               <Text style={styles.mobileTabActiveText}>Para ti</Text>
               <View style={styles.mobileActiveUnderline} />
-            </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.mobileHeaderRightRow}>
-            {/* Alternar a PC en móvil */}
             <TouchableOpacity
-              style={styles.mobileSwitchModeBtn}
-              onPress={() => setForceMode('DESKTOP')}
+              style={styles.mobileCircleIconBtn}
+              onPress={() => setIsMuted(!isMuted)}
+              activeOpacity={0.8}
             >
-              <Monitor size={16} color="#00F2FE" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.mobileSearchBtn}>
-              <Search size={22} color="#FFFFFF" />
+              {isMuted ? (
+                <VolumeX size={18} color="#FFFFFF" />
+              ) : (
+                <Volume2 size={18} color="#FFFFFF" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* 2. Columna Lateral Derecha de Acciones */}
+        {/* 2. Columna Lateral Derecha de Acciones con Contadores Limpios/Dinámicos */}
         <View style={styles.mobileActionColumn}>
           {/* Avatar con Botón Circular Rojo + */}
           <View style={styles.mobileAvatarBox}>
@@ -812,7 +797,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Me Gusta (5 mil) */}
+          {/* Me Gusta (Reiniciado a valor real) */}
           <View style={styles.mobileActionItem}>
             <TouchableOpacity
               onPress={handleToggleLike}
@@ -825,10 +810,10 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
                 fill={isLiked ? '#FF2D55' : '#FFFFFF'}
               />
             </TouchableOpacity>
-            <Text style={styles.mobileActionText}>5 mil</Text>
+            <Text style={styles.mobileActionText}>{formatCounter(likesCount)}</Text>
           </View>
 
-          {/* Comentarios (23) */}
+          {/* Comentarios (Reiniciado a comentarios reales) */}
           <View style={styles.mobileActionItem}>
             <TouchableOpacity
               onPress={() => setShowComments(true)}
@@ -837,10 +822,10 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
             >
               <MessageCircle size={32} color="#FFFFFF" fill="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.mobileActionText}>23</Text>
+            <Text style={styles.mobileActionText}>{formatCounter(commentsList.length)}</Text>
           </View>
 
-          {/* Guardar (209) */}
+          {/* Favoritos / Guardar (Reiniciado a valor real) */}
           <View style={styles.mobileActionItem}>
             <TouchableOpacity
               onPress={handleToggleSave}
@@ -853,10 +838,10 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
                 fill={isSaved ? '#FFD700' : '#FFFFFF'}
               />
             </TouchableOpacity>
-            <Text style={styles.mobileActionText}>209</Text>
+            <Text style={styles.mobileActionText}>{formatCounter(bookmarksCount)}</Text>
           </View>
 
-          {/* Compartir (388) */}
+          {/* Compartir (Reiniciado a valor real) */}
           <View style={styles.mobileActionItem}>
             <TouchableOpacity
               onPress={handleShare}
@@ -865,7 +850,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
             >
               <Share2 size={32} color="#FFFFFF" fill="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.mobileActionText}>388</Text>
+            <Text style={styles.mobileActionText}>{formatCounter(sharesCount)}</Text>
           </View>
 
           {/* Disco de Vinilo con Carátula Rotatoria */}
@@ -886,30 +871,45 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
           </Animated.View>
         </View>
 
-        {/* 3. Overlay Inferior Izquierdo: @kalohenao #trillizas #tiktok + Sonido */}
+        {/* 3. Overlay Inferior Izquierdo: @creador, título y hashtags */}
         <View style={styles.mobileBottomInfoOverlay}>
           <TouchableOpacity
             onPress={() => onViewActor && onViewActor(currentVideo?.creatorId, currentVideo?.creatorName)}
           >
             <Text style={styles.mobileUsernameText}>
-              {currentVideo?.creatorName ? `@${currentVideo.creatorName.toLowerCase().replace(/\s+/g, '')}` : '@kalohenao'}
+              {currentVideo?.creatorName
+                ? `@${currentVideo.creatorName.toLowerCase().replace(/\s+/g, '')}`
+                : '@texxxnopor'}
             </Text>
           </TouchableOpacity>
 
-          <Text style={styles.mobileCaptionText}>
-            {currentVideo?.description || '#trillizas #tiktok'}
-          </Text>
-
-          {/* Ticker Sonoro Musical */}
-          <View style={styles.mobileSoundTickerRow}>
-            <Music size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.mobileSoundTickerText} numberOfLines={1}>
-              sonido original - {currentVideo?.creatorName || 'kalohenao'}
+          {currentVideo?.title ? (
+            <Text style={styles.mobileTitleText} numberOfLines={2}>
+              {currentVideo.title}
             </Text>
+          ) : null}
+
+          {currentVideo?.description && currentVideo.description !== currentVideo.title ? (
+            <Text style={styles.mobileCaptionText} numberOfLines={2}>
+              {currentVideo.description}
+            </Text>
+          ) : null}
+
+          {/* Hashtags */}
+          <View style={styles.mobileTagsRow}>
+            {currentVideo?.tags && currentVideo.tags.length > 0 ? (
+              currentVideo.tags.map((tag, idx) => (
+                <Text key={idx} style={styles.mobileTagText}>
+                  {tag.startsWith('#') ? tag : `#${tag}`}{' '}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.mobileTagText}>#parati #shorts #texxxnopor</Text>
+            )}
           </View>
         </View>
 
-        {/* Barra de Progreso Scrubber del Video */}
+        {/* Barra de Progreso Scrubber del Video en la Base */}
         <View style={styles.mobileProgressLineTrack}>
           <View
             style={[
@@ -917,44 +917,6 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
               { width: `${Math.max(2, progress * 100)}%` },
             ]}
           />
-        </View>
-
-        {/* 4. Barra de Navegación Inferior Estilo TikTok: Inicio | Explora | [+] | Mensajes | Yo */}
-        <View style={styles.mobileTikTokTabBar}>
-          <TouchableOpacity style={styles.mobileTabButton} onPress={onBack}>
-            <Home size={22} color="#FFFFFF" />
-            <Text style={[styles.mobileTabButtonText, { color: '#FFFFFF' }]}>Inicio</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.mobileTabButton} onPress={onBack}>
-            <Compass size={22} color="#8E8E93" />
-            <Text style={styles.mobileTabButtonText}>Explora</Text>
-          </TouchableOpacity>
-
-          {/* Botón Central [+] con Estilo Icónico TikTok */}
-          <TouchableOpacity
-            style={styles.mobileTikTokCreateBtn}
-            onPress={() => onOpenLive && onOpenLive()}
-          >
-            <View style={styles.mobileCreateBtnCyanWing} />
-            <View style={styles.mobileCreateBtnPinkWing} />
-            <View style={styles.mobileCreateBtnCenter}>
-              <Plus size={18} color="#000000" strokeWidth={3} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.mobileTabButton}>
-            <MessageSquare size={22} color="#8E8E93" />
-            <Text style={styles.mobileTabButtonText}>Mensajes</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.mobileTabButton}
-            onPress={() => onViewActor && onViewActor(currentVideo?.creatorId, currentVideo?.creatorName)}
-          >
-            <User size={22} color="#8E8E93" />
-            <Text style={styles.mobileTabButtonText}>Yo</Text>
-          </TouchableOpacity>
         </View>
       </View>
     );
@@ -1377,7 +1339,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '46%',
     left: '50%',
-    transform: [{ translateX: -27 }, { translateY: -27 }],
+    transform: [{ translateX: -37 }, { translateY: -37 }],
+    zIndex: 30,
+  },
+  playPauseCircleBg: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   floatingHeartItem: {
     position: 'absolute',
@@ -1386,95 +1359,71 @@ const styles = StyleSheet.create({
   mobileHeaderBar: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 44 : 26,
-    left: 16,
-    right: 16,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
   },
-  mobileLiveButton: {
-    flexDirection: 'row',
+  mobileBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
-    gap: 4,
-    padding: 6,
-  },
-  mobileLiveText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    justifyContent: 'center',
   },
   mobileTabsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  mobileTabItem: {
-    position: 'relative',
-    paddingVertical: 4,
+    justifyContent: 'center',
   },
   mobileTabItemActive: {
     position: 'relative',
     paddingVertical: 4,
     alignItems: 'center',
   },
-  mobileTabInactiveText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   mobileTabActiveText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: 'bold',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowRadius: 4,
   },
   mobileActiveUnderline: {
     position: 'absolute',
-    bottom: -2,
+    bottom: -3,
     width: 28,
     height: 3,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
-  },
-  mobileFriendsRedBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -16,
     backgroundColor: '#FF2D55',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  mobileFriendsBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: 'bold',
+    borderRadius: 2,
   },
   mobileHeaderRightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
-  mobileSwitchModeBtn: {
-    padding: 6,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 16,
-  },
-  mobileSearchBtn: {
-    padding: 6,
+  mobileCircleIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mobileActionColumn: {
     position: 'absolute',
     right: 12,
-    bottom: 90,
+    bottom: 24,
     alignItems: 'center',
-    gap: 18,
+    gap: 16,
     zIndex: 20,
   },
   mobileAvatarBox: {
     position: 'relative',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   mobileAvatarTouch: {
     padding: 2,
@@ -1498,7 +1447,7 @@ const styles = StyleSheet.create({
   },
   mobileActionItem: {
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   mobileActionBtn: {
     padding: 2,
@@ -1507,19 +1456,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
-    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowRadius: 4,
   },
   mobileVinylContainer: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#111116',
-    borderWidth: 9,
+    borderWidth: 8,
     borderColor: '#22222E',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   mobileVinylImage: {
     width: 20,
@@ -1529,50 +1478,60 @@ const styles = StyleSheet.create({
   mobileBottomInfoOverlay: {
     position: 'absolute',
     left: 14,
-    bottom: 74,
-    right: 90,
+    bottom: 18,
+    right: 86,
     zIndex: 20,
   },
   mobileUsernameText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 6,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowRadius: 4,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 5,
   },
-  mobileCaptionText: {
+  mobileTitleText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 18,
-    marginBottom: 8,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowRadius: 4,
+    fontWeight: '700',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 5,
   },
-  mobileSoundTickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mobileSoundTickerText: {
-    color: '#FFFFFF',
+  mobileCaptionText: {
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
     fontWeight: '500',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowRadius: 4,
+    lineHeight: 17,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 5,
+  },
+  mobileTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  mobileTagText: {
+    color: '#FF2D55',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 5,
   },
   mobileProgressLineTrack: {
     position: 'absolute',
-    bottom: 58,
+    bottom: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    zIndex: 20,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    zIndex: 25,
   },
   mobileProgressLineFill: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FF2D55',
   },
   mobileTikTokTabBar: {
     position: 'absolute',
