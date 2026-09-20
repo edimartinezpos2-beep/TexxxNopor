@@ -54,12 +54,12 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Botón principal: Redireccionar a la página principal para descargar el APK desde la barra superior
+  // Botón principal: Redireccionar a la página web oficial para descargar el APK desde la barra superior
   const handleDownloadUpdate = () => {
-    const webUrl = updateInfo?.webUrl || 'https://texxxnopor-backend.onrender.com';
+    const webUrl = updateInfo?.webUrl || 'https://texxxnopor-web.onrender.com/';
     Linking.openURL(webUrl).catch(() => {
       const fallbackUrl =
-        updateInfo?.updateUrl || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+        updateInfo?.updateUrl || 'https://texxxnopor-web.onrender.com/';
       Linking.openURL(fallbackUrl).catch(() => {});
     });
   };
@@ -118,11 +118,11 @@ export const ForceUpdateGate: React.FC<{ children: React.ReactNode }> = ({ child
               ))}
             </View>
 
-            {/* BOTÓN ÚNICO: Descargar (redirecciona a la página principal para descargar el APK) */}
+            {/* BOTÓN ÚNICO: Descargar (redirecciona a la página web oficial https://texxxnopor-web.onrender.com/) */}
             <TouchableOpacity style={styles.updateBtn} onPress={handleDownloadUpdate} activeOpacity={0.85}>
-              <Download size={20} color="#000000" />
+              <Download size={20} color="#FFFFFF" />
               <Text style={styles.updateBtnText}>
-                Descargar
+                Descargar en la Web Oficial
               </Text>
             </TouchableOpacity>
 
@@ -252,14 +252,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: COLORS.neonLime,
+    backgroundColor: '#E50914',
     width: '100%',
     paddingVertical: 16,
     borderRadius: 14,
     marginBottom: 12,
   },
   updateBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
   },

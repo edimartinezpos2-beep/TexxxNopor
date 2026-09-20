@@ -1505,8 +1505,8 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'No existe ninguna cuenta registrada con este correo electrónico' });
     }
 
-    // Generar código numérico seguro de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generar código numérico de 4 dígitos para el deck de cartas OTP
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Válido por 15 minutos
 
     await prisma.user.update({
@@ -1517,15 +1517,15 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
       },
     });
 
-    console.log(`🔑 [Recuperar Contraseña] Código para ${normalizedEmail}: ${code}`);
+    console.log(`🔑 [Recuperar Contraseña] Código OTP 4 dígitos para ${normalizedEmail}: ${code}`);
 
-    // Enviar correo con plantilla HTML llamativa con logo y código de 6 dígitos
+    // Enviar correo con plantilla HTML llamativa con logo y código de 4 dígitos
     const emailResult = await sendPasswordRecoveryEmail(normalizedEmail, user.username, code);
 
     return res.json({
       status: 'success',
       message: emailResult.success
-        ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos. Revisa también tu carpeta de Spam.`
+        ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 4 dígitos. Revisa también tu carpeta de Spam.`
         : `Código generado exitosamente. Ingrésalo a continuación.`,
       code,
       previewUrl: emailResult.previewUrl,
@@ -2757,7 +2757,7 @@ app.get('/api/app/version-check', (req: Request, res: Response) => {
       forceUpdate: false,
       platform: 'web',
       updateUrl: process.env.APP_UPDATE_URL || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest',
-      webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-backend.onrender.com',
+      webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-web.onrender.com/',
       title: 'Plataforma Web Actualizada',
       message: 'La versión web se encuentra en su versión más reciente con actualización automática.',
       releaseNotes: [
@@ -2784,7 +2784,7 @@ app.get('/api/app/version-check', (req: Request, res: Response) => {
     updateUrl:
       process.env.APP_UPDATE_URL ||
       'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest',
-    webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-backend.onrender.com',
+    webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-web.onrender.com/',
     title: isOutdated ? 'Actualización Obligatoria Requerida' : 'App Actualizada',
     message: isOutdated
       ? `Tu versión (${clientVersion}) ha caducado y ya no es compatible. Para continuar usando TexxxNopor debes actualizar a la versión ${latestVersion}.`

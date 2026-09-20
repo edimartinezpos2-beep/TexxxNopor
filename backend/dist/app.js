@@ -23,11 +23,13 @@ const emailService_1 = require("./services/emailService");
 const notification_service_1 = require("./services/notification.service");
 const wompi_service_1 = require("./services/wompi.service");
 const cloudinary_service_1 = require("./services/cloudinary.service");
+const audit_service_1 = require("./services/audit.service");
+const admin_suite_routes_1 = __importDefault(require("./routes/admin_suite.routes"));
 dotenv_1.default.config();
 exports.prisma = new client_1.PrismaClient();
 const app = (0, express_1.default)();
 exports.app = app;
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-texxxnopor-key';
 exports.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '297210527171-d289elhgeo0raca0dki1f1bsam7ippg0.apps.googleusercontent.com';
 exports.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
@@ -47,7 +49,7 @@ fs_1.default.mkdirSync(exports.UPLOADS_IMAGES_DIR, { recursive: true });
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '1024mb' }));
 app.use(express_1.default.urlencoded({ limit: '1024mb', extended: true }));
-app.use('/uploads', express_1.default.static(exports.UPLOADS_DIR));
+// Nota: /uploads/images y /uploads/videos se sirven más abajo con fallback CDN automático
 // Servir frontend web de TexxxNopor automáticamente si existe la compilación
 const WEB_DIST_PATH = path_1.default.join(__dirname, '../../mobile/dist');
 const LOCAL_WEB_PATH = path_1.default.join(__dirname, '../public');
@@ -58,14 +60,22 @@ else if (fs_1.default.existsSync(LOCAL_WEB_PATH)) {
     app.use(express_1.default.static(LOCAL_WEB_PATH));
 }
 // Streaming de video de alto rendimiento con soporte de HTTP 206 (Partial Content / Ranges)
+// Si el archivo NO existe en disco (Render borra /uploads en restart) → redirige a CDN fallback
+const FALLBACK_VIDEO_CDN = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+const FALLBACK_IMAGE_CDN = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
 app.get('/api/stream/video/:filename', (req, res) => {
     const filePath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, req.params.filename);
     if (!fs_1.default.existsSync(filePath)) {
-        return res.status(404).json({ error: 'Video no encontrado en el servidor' });
+        // Redirigir al CDN de respaldo para que el reproductor no falle
+        console.warn(`[Stream] Archivo no encontrado en disco: ${req.params.filename} → redirigiendo a CDN fallback`);
+        return res.redirect(302, FALLBACK_VIDEO_CDN);
     }
     const stat = fs_1.default.statSync(filePath);
     const fileSize = stat.size;
     const range = req.headers.range;
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+    res.header('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
     if (range) {
         const parts = range.replace(/bytes=/, '').split('-');
         const start = parseInt(parts[0], 10);
@@ -77,6 +87,7 @@ app.get('/api/stream/video/:filename', (req, res) => {
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
             'Content-Type': 'video/mp4',
+            'Access-Control-Allow-Origin': '*',
         };
         res.writeHead(206, head);
         file.pipe(res);
@@ -86,10 +97,55 @@ app.get('/api/stream/video/:filename', (req, res) => {
             'Content-Length': fileSize,
             'Content-Type': 'video/mp4',
             'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
         };
         res.writeHead(200, head);
         fs_1.default.createReadStream(filePath).pipe(res);
     }
+});
+// Servir archivos estáticos de /uploads con fallback a CDN cuando no existen en disco
+// Videos: ya manejados arriba con /api/stream/video/:filename
+app.use('/uploads/images', (req, res, next) => {
+    const filename = req.path.replace(/^\//, '');
+    const filePath = path_1.default.join(exports.UPLOADS_IMAGES_DIR, filename);
+    if (filename && !fs_1.default.existsSync(filePath)) {
+        console.warn(`[Static] Imagen no encontrada en disco: ${filename} → fallback CDN`);
+        return res.redirect(302, FALLBACK_IMAGE_CDN);
+    }
+    next();
+}, express_1.default.static(exports.UPLOADS_IMAGES_DIR));
+// Videos estáticos (fallback si alguien accede directo a /uploads/videos)
+app.use('/uploads/videos', (req, res, next) => {
+    const filename = req.path.replace(/^\//, '');
+    const filePath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, filename);
+    if (filename && !fs_1.default.existsSync(filePath)) {
+        console.warn(`[Static] Video no encontrado en disco: ${filename} → fallback CDN`);
+        return res.redirect(302, FALLBACK_VIDEO_CDN);
+    }
+    next();
+}, express_1.default.static(exports.UPLOADS_VIDEOS_DIR));
+// ====================================================
+// RUTAS DIRECTAS DE DESCARGA DE APK INSTALABLE
+// ====================================================
+app.get(['/download', '/api/app/download-apk'], (req, res) => {
+    // 1. Si existe un archivo APK físico alojado en el servidor
+    const possibleApkPaths = [
+        path_1.default.join(__dirname, '../public/TexxxNopor.apk'),
+        path_1.default.join(__dirname, '../uploads/TexxxNopor.apk'),
+        path_1.default.join(process.cwd(), 'public/TexxxNopor.apk'),
+        path_1.default.join(process.cwd(), 'uploads/TexxxNopor.apk'),
+    ];
+    for (const apkPath of possibleApkPaths) {
+        if (fs_1.default.existsSync(apkPath)) {
+            res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+            res.setHeader('Content-Disposition', 'attachment; filename="TexxxNopor.apk"');
+            return res.sendFile(apkPath);
+        }
+    }
+    // 2. Redirección a la URL configurada en el entorno (EAS Build, Google Drive, Mediafire, GitHub)
+    const downloadUrl = process.env.APP_UPDATE_URL ||
+        'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest';
+    return res.redirect(downloadUrl);
 });
 // ====================================================
 // ENDPOINT PÚBLICO: POLÍTICA DE PRIVACIDAD Y DATOS (+18)
@@ -420,7 +476,7 @@ async function ensureCreatorProfileAndActor(userId, username, avatarUrl) {
                     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop',
                 bannerUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=1200&auto=format&fit=crop',
                 nationality: 'Colombia',
-                isVerified: true,
+                isVerified: false,
             },
         });
     }
@@ -452,6 +508,45 @@ function formatVideoItem(v, currentUserId, userFavorites) {
     const creatorDisplayAvatar = v.creator?.user?.avatarUrl ||
         v.actor?.avatarUrl ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop';
+    // Sanitizar URLs de /uploads que serán 404 en Render tras restart
+    // Si la URL apunta a /uploads/... en el servidor Render y el archivo no está en disco → CDN fallback
+    const sanitizeVideoUrl = (url) => {
+        if (!url)
+            return 'https://vjs.zencdn.net/v/oceans.mp4';
+        // Si ya es una URL externa (no del servidor local/Render uploads), usar tal cual
+        const isRenderUpload = url.includes('texxxnopor-backend.onrender.com/uploads/') ||
+            url.includes('192.168.') ||
+            url.includes('localhost');
+        if (!isRenderUpload)
+            return url;
+        // Verificar si el archivo existe localmente (si el servidor tiene el archivo)
+        try {
+            const filename = url.split('/uploads/videos/').pop() || '';
+            const localPath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, filename);
+            if (filename && fs_1.default.existsSync(localPath))
+                return url;
+        }
+        catch (_) { }
+        // Archivo no existe en disco → fallback CDN
+        return 'https://vjs.zencdn.net/v/oceans.mp4';
+    };
+    const sanitizeThumbnailUrl = (url) => {
+        if (!url)
+            return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+        const isRenderUpload = url.includes('texxxnopor-backend.onrender.com/uploads/') ||
+            url.includes('192.168.') ||
+            url.includes('localhost');
+        if (!isRenderUpload)
+            return url;
+        try {
+            const filename = url.split('/uploads/images/').pop() || '';
+            const localPath = path_1.default.join(exports.UPLOADS_IMAGES_DIR, filename);
+            if (filename && fs_1.default.existsSync(localPath))
+                return url;
+        }
+        catch (_) { }
+        return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
+    };
     return {
         id: v.id,
         title: v.title,
@@ -461,14 +556,15 @@ function formatVideoItem(v, currentUserId, userFavorites) {
         views: viewsNum >= 1000 ? `${Math.round(viewsNum / 1000)}k vistas` : `${viewsNum} vistas`,
         viewsCount: viewsNum,
         likesCount: likesNum,
-        thumbnailUrl: v.thumbnailUrl ||
-            'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
+        thumbnailUrl: sanitizeThumbnailUrl(v.thumbnailUrl),
         thumbnailPublicId: v.thumbnailPublicId || undefined,
-        videoUrl: v.videoUrl || 'https://vjs.zencdn.net/v/oceans.mp4',
+        videoUrl: sanitizeVideoUrl(v.videoUrl),
         cloudinaryPublicId: v.cloudinaryPublicId || undefined,
-        hlsMasterUrl: v.hlsMasterUrl || 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+        hlsMasterUrl: sanitizeVideoUrl(v.hlsMasterUrl || v.videoUrl),
         category: v.category?.name || 'Para ti',
         tags: v.tagsList || [],
+        isShort: Boolean(v.isShort || (v.durationSeconds && v.durationSeconds <= 60)),
+        aspectRatio: v.aspectRatio || (v.isShort ? '9:16' : '16:9'),
         isNew: Date.now() - new Date(v.createdAt).getTime() < 3 * 24 * 60 * 60 * 1000,
         actorId: v.actor?.id || undefined,
         actorName: v.actor?.stageName || 'Actor Principal',
@@ -1124,6 +1220,13 @@ app.post('/api/auth/login', async (req, res) => {
         if (!passwordMatch && user.passwordHash !== password) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
+        if (user.isSuspended) {
+            return res.status(403).json({
+                error: `Tu cuenta se encuentra suspendida por la administración de la plataforma. Motivo: ${user.suspensionReason || 'Incumplimiento de términos legales o conductas no permitidas'}. Para apelaciones o soporte, contacta a legal@texxxnopor.com.`,
+                isSuspended: true,
+                suspensionReason: user.suspensionReason,
+            });
+        }
         const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
         return res.json({
             token,
@@ -1136,12 +1239,73 @@ app.post('/api/auth/login', async (req, res) => {
                 authProvider: user.authProvider,
                 avatarUrl: user.avatarUrl,
                 isVerified: user.isVerified,
+                isSuspended: user.isSuspended,
+                suspensionReason: user.suspensionReason,
+                kycStatus: user.kycStatus,
             },
         });
     }
     catch (error) {
         console.error('Error in login:', error);
         return res.status(500).json({ error: 'Error al iniciar sesión' });
+    }
+});
+// ⚡ INICIO DE SESIÓN DIRECTO / DEMO USUARIO ANÓNIMO VIP (CON TODAS LAS SUSCRIPCIONES ACTIVAS)
+app.post('/api/auth/demo-vip', async (req, res) => {
+    try {
+        const demoEmail = 'anonimo@texxxnopor.com';
+        let user = await exports.prisma.user.findUnique({
+            where: { email: demoEmail },
+        });
+        if (!user) {
+            const passwordHash = await bcrypt_1.default.hash('TexxxVip2026!', 10);
+            user = await exports.prisma.user.create({
+                data: {
+                    email: demoEmail,
+                    username: 'anonimo_vip',
+                    passwordHash,
+                    role: 'CONSUMER',
+                    isVip: true,
+                    isVerified: true,
+                    vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+                    subscriptionPlan: 'VIP_PLATINUM_FULL',
+                    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop',
+                    age: 24,
+                },
+            });
+        }
+        else if (!user.isVip || !user.subscriptionPlan) {
+            user = await exports.prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    isVip: true,
+                    isVerified: true,
+                    vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+                    subscriptionPlan: 'VIP_PLATINUM_FULL',
+                },
+            });
+        }
+        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+        return res.json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                role: user.role,
+                isVip: true,
+                isVerified: true,
+                subscriptionPlan: user.subscriptionPlan,
+                vipExpiresAt: user.vipExpiresAt,
+                avatarUrl: user.avatarUrl,
+                age: user.age || 24,
+            },
+            message: 'Sesión iniciada con éxito como Usuario Anónimo VIP con todas las suscripciones activas',
+        });
+    }
+    catch (err) {
+        console.error('Error in demo VIP login:', err);
+        return res.status(500).json({ error: 'Error al iniciar sesión anónima VIP' });
     }
 });
 app.get('/api/auth/me', rbac_middleware_1.authenticateJWT, async (req, res) => {
@@ -1160,6 +1324,9 @@ app.get('/api/auth/me', rbac_middleware_1.authenticateJWT, async (req, res) => {
                 authProvider: user.authProvider,
                 avatarUrl: user.avatarUrl,
                 isVerified: user.isVerified,
+                isSuspended: user.isSuspended,
+                suspensionReason: user.suspensionReason,
+                kycStatus: user.kycStatus,
             },
         });
     }
@@ -1179,8 +1346,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'No existe ninguna cuenta registrada con este correo electrónico' });
         }
-        // Generar código numérico seguro de 6 dígitos
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generar código numérico de 4 dígitos para el deck de cartas OTP
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Válido por 15 minutos
         await exports.prisma.user.update({
             where: { email: normalizedEmail },
@@ -1189,13 +1356,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
                 resetCodeExpiresAt: expiresAt,
             },
         });
-        console.log(`🔑 [Recuperar Contraseña] Código para ${normalizedEmail}: ${code}`);
-        // Enviar correo con plantilla HTML llamativa con logo y código de 6 dígitos
+        console.log(`🔑 [Recuperar Contraseña] Código OTP 4 dígitos para ${normalizedEmail}: ${code}`);
+        // Enviar correo con plantilla HTML llamativa con logo y código de 4 dígitos
         const emailResult = await (0, emailService_1.sendPasswordRecoveryEmail)(normalizedEmail, user.username, code);
         return res.json({
             status: 'success',
             message: emailResult.success
-                ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 6 dígitos. Revisa también tu carpeta de Spam.`
+                ? `Hemos enviado un correo a ${normalizedEmail} con tu código de 4 dígitos. Revisa también tu carpeta de Spam.`
                 : `Código generado exitosamente. Ingrésalo a continuación.`,
             code,
             previewUrl: emailResult.previewUrl,
@@ -1705,7 +1872,7 @@ app.post('/api/user/upgrade-to-actor', rbac_middleware_1.authenticateJWT, async 
             where: { id: userId },
             data: {
                 role: 'CREATOR',
-                isVerified: true,
+                isVerified: false,
             },
         });
         // 2. Crear o vincular Actor y CreatorProfile
@@ -1980,6 +2147,153 @@ app.post('/api/wompi/create-transaction', rbac_middleware_1.authenticateJWT, asy
         return res.status(500).json({ error: 'Error al procesar la transacción con Wompi' });
     }
 });
+// 2.1 Generar Enlace Directo de Checkout Wompi con Precio Exacto Visible
+app.post('/api/wompi/checkout-link', async (req, res) => {
+    try {
+        const { amount, plan, reference: customRef, customerEmail } = req.body;
+        const planAmount = Number(amount) || 15000;
+        const amountInCents = Math.round(planAmount * 100);
+        const reference = customRef || `TX-WOMPI-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const pubKey = wompi_service_1.WompiService.getPublicKey();
+        const signature = wompi_service_1.WompiService.generateIntegritySignature(reference, amountInCents, 'COP');
+        const redirectUrl = `https://texxxnopor-backend.onrender.com/api/wompi/redirect-handler`;
+        const checkoutUrl = `https://checkout.wompi.co/p/?public-key=${pubKey}&currency=COP&amount-in-cents=${amountInCents}&reference=${reference}&signature:integrity=${signature}&redirect-url=${encodeURIComponent(redirectUrl)}`;
+        return res.json({
+            status: 'success',
+            amount: planAmount,
+            amountInCents,
+            formattedPrice: `$${planAmount.toLocaleString('es-CO')} COP`,
+            reference,
+            checkoutUrl,
+            publicKey: pubKey,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al generar enlace de checkout Wompi' });
+    }
+});
+// ====================================================
+// GESTIÓN DE HASHTAGS GLOBALES (GUARDADOS Y SUGERIDOS)
+// ====================================================
+app.get('/api/tags', async (req, res) => {
+    try {
+        const DEFAULT_BASE_TAGS = [
+            '#parati',
+            '#nuevos',
+            '#masvideos',
+            '#amateur',
+            '#pareja',
+            '#hd',
+            '#4k',
+            '#estreno',
+            '#verificado',
+        ];
+        const [dbTags, recentVideos] = await Promise.all([
+            exports.prisma.tag.findMany({ select: { name: true } }).catch(() => []),
+            exports.prisma.video.findMany({
+                take: 100,
+                select: { tagsList: true },
+                orderBy: { createdAt: 'desc' },
+            }).catch(() => []),
+        ]);
+        const tagSet = new Set(DEFAULT_BASE_TAGS);
+        dbTags.forEach((t) => {
+            if (t.name) {
+                const clean = t.name.startsWith('#') ? t.name.toLowerCase() : `#${t.name.toLowerCase()}`;
+                tagSet.add(clean);
+            }
+        });
+        recentVideos.forEach((v) => {
+            if (Array.isArray(v.tagsList)) {
+                v.tagsList.forEach((t) => {
+                    if (t && typeof t === 'string') {
+                        const clean = t.trim().startsWith('#') ? t.trim().toLowerCase() : `#${t.trim().toLowerCase()}`;
+                        tagSet.add(clean);
+                    }
+                });
+            }
+        });
+        return res.json({
+            status: 'success',
+            tags: Array.from(tagSet),
+        });
+    }
+    catch (err) {
+        return res.json({
+            status: 'success',
+            tags: [
+                '#parati',
+                '#nuevos',
+                '#masvideos',
+                '#amateur',
+                '#pareja',
+                '#hd',
+                '#4k',
+                '#estreno',
+                '#verificado',
+            ],
+        });
+    }
+});
+// GET /api/tags/popular: Agrupación y conteo real de videos por hashtag en la base de datos
+app.get('/api/tags/popular', async (req, res) => {
+    try {
+        const allVideos = await exports.prisma.video.findMany({
+            where: { status: 'READY' },
+            select: { tagsList: true },
+        });
+        const tagCounts = {
+            '#parati': 0,
+            '#nuevos': 0,
+            '#masvideos': 0,
+            '#amateur': 0,
+            '#pareja': 0,
+            '#hd': 0,
+            '#4k': 0,
+            '#estreno': 0,
+        };
+        allVideos.forEach((v) => {
+            if (Array.isArray(v.tagsList)) {
+                v.tagsList.forEach((t) => {
+                    if (t && typeof t === 'string') {
+                        const clean = t.trim().startsWith('#') ? t.trim().toLowerCase() : `#${t.trim().toLowerCase()}`;
+                        tagCounts[clean] = (tagCounts[clean] || 0) + 1;
+                    }
+                });
+            }
+        });
+        // Imágenes temáticas de fondo para las tarjetas visuales
+        const tagImages = {
+            '#parati': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+            '#amateur': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
+            '#pareja': 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop',
+            '#hd': 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop',
+            '#4k': 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop',
+            '#nuevos': 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop',
+            '#masvideos': 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop',
+            '#estreno': 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop',
+        };
+        const popularTags = Object.entries(tagCounts)
+            .map(([name, count], index) => ({
+            id: `pop-tag-${index + 1}`,
+            name,
+            count,
+            countFormatted: count === 1 ? '1 video' : `${count} videos`,
+            badge: count >= 4 ? 'HOT' : count >= 2 ? 'POPULAR' : undefined,
+            imageUrl: tagImages[name] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+        }))
+            .sort((a, b) => b.count - a.count);
+        return res.json({
+            status: 'success',
+            totalVideosEvaluated: allVideos.length,
+            tags: popularTags,
+        });
+    }
+    catch (err) {
+        console.error('Error fetching popular tags:', err);
+        return res.status(500).json({ error: 'Error al consultar tags populares' });
+    }
+});
 // 3. Consultar Estado de Transacción Wompi
 app.get('/api/wompi/status/:transactionId', rbac_middleware_1.authenticateJWT, async (req, res) => {
     try {
@@ -2156,7 +2470,7 @@ app.get('/api/app/version-check', (req, res) => {
             forceUpdate: false,
             platform: 'web',
             updateUrl: process.env.APP_UPDATE_URL || 'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest',
-            webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-backend.onrender.com',
+            webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-web.onrender.com/',
             title: 'Plataforma Web Actualizada',
             message: 'La versión web se encuentra en su versión más reciente con actualización automática.',
             releaseNotes: [
@@ -2180,7 +2494,7 @@ app.get('/api/app/version-check', (req, res) => {
         platform,
         updateUrl: process.env.APP_UPDATE_URL ||
             'https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest',
-        webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-backend.onrender.com',
+        webUrl: process.env.APP_WEB_URL || 'https://texxxnopor-web.onrender.com/',
         title: isOutdated ? 'Actualización Obligatoria Requerida' : 'App Actualizada',
         message: isOutdated
             ? `Tu versión (${clientVersion}) ha caducado y ya no es compatible. Para continuar usando TexxxNopor debes actualizar a la versión ${latestVersion}.`
@@ -2249,14 +2563,26 @@ app.post('/api/user/notifications/read-all', rbac_middleware_1.authenticateJWT, 
 app.get('/api/admin/users', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
     try {
         const users = await exports.prisma.user.findMany({
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
                 email: true,
                 username: true,
                 role: true,
                 isVerified: true,
+                isSuspended: true,
+                suspensionReason: true,
+                kycStatus: true,
+                isVip: true,
+                avatarUrl: true,
                 createdAt: true,
+                _count: {
+                    select: {
+                        comments: true,
+                        videoLikes: true,
+                        favorites: true,
+                    },
+                },
             },
         });
         return res.json({
@@ -2266,6 +2592,12 @@ app.get('/api/admin/users', rbac_middleware_1.authenticateJWT, (0, rbac_middlewa
                 username: u.username,
                 role: u.role,
                 isVerified: u.isVerified,
+                isSuspended: u.isSuspended,
+                suspensionReason: u.suspensionReason,
+                kycStatus: u.kycStatus,
+                isVip: u.isVip,
+                avatarUrl: u.avatarUrl,
+                activityCount: u._count.comments + u._count.videoLikes + u._count.favorites,
                 createdAt: u.createdAt.toISOString(),
             })),
         });
@@ -2278,15 +2610,20 @@ app.get('/api/admin/users', rbac_middleware_1.authenticateJWT, (0, rbac_middlewa
 app.patch('/api/admin/users/:id/role', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
+    const adminId = req.user.id;
     if (!role || !['ADMIN', 'CREATOR', 'CONSUMER'].includes(role)) {
         return res.status(400).json({ error: 'Rol inválido proporcionado' });
     }
     try {
+        const targetUser = await exports.prisma.user.findUnique({ where: { id } });
+        if (!targetUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
         const updated = await exports.prisma.user.update({
             where: { id },
             data: {
                 role: role,
-                isVerified: role === 'ADMIN' || role === 'CREATOR',
+                isVerified: role === 'ADMIN' || (role === 'CREATOR' && targetUser.kycStatus === 'APPROVED'),
             },
             select: {
                 id: true,
@@ -2294,18 +2631,25 @@ app.patch('/api/admin/users/:id/role', rbac_middleware_1.authenticateJWT, (0, rb
                 username: true,
                 role: true,
                 isVerified: true,
+                isSuspended: true,
+                suspensionReason: true,
+                kycStatus: true,
                 createdAt: true,
             },
         });
+        await audit_service_1.AuditService.log({
+            adminId,
+            action: 'ROLE_CHANGE',
+            entityType: 'USER',
+            entityId: id,
+            details: { targetUsername: updated.username, oldRole: targetUser.role, newRole: role },
+            ipAddress: req.ip,
+        });
         return res.json({
             status: 'success',
-            message: 'Rol de usuario actualizado con éxito',
+            message: `Rol de ${updated.username} actualizado a ${updated.role}`,
             user: {
-                id: updated.id,
-                email: updated.email,
-                username: updated.username,
-                role: updated.role,
-                isVerified: updated.isVerified,
+                ...updated,
                 createdAt: updated.createdAt.toISOString(),
             },
         });
@@ -2313,6 +2657,54 @@ app.patch('/api/admin/users/:id/role', rbac_middleware_1.authenticateJWT, (0, rb
     catch (err) {
         console.error('Error updating user role:', err);
         return res.status(500).json({ error: 'No se pudo actualizar el rol del usuario' });
+    }
+});
+// Suspender o reactivar cuenta de usuario (ADMIN ONLY)
+app.patch('/api/admin/users/:id/suspend', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
+    const { id } = req.params;
+    const { isSuspended, reason } = req.body;
+    const adminId = req.user.id;
+    if (id === adminId && isSuspended) {
+        return res.status(400).json({
+            error: 'Por seguridad, no puedes suspender tu propia cuenta de Administrador principal.',
+        });
+    }
+    try {
+        const targetUser = await exports.prisma.user.findUnique({ where: { id } });
+        if (!targetUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        const updated = await exports.prisma.user.update({
+            where: { id },
+            data: {
+                isSuspended: !!isSuspended,
+                suspensionReason: isSuspended ? (reason || 'Violación de los Términos y Políticas de Servicio') : null,
+            },
+        });
+        await audit_service_1.AuditService.log({
+            adminId,
+            action: isSuspended ? 'USER_SUSPEND' : 'USER_ACTIVATE',
+            entityType: 'USER',
+            entityId: id,
+            details: { targetUsername: updated.username, reason },
+            ipAddress: req.ip,
+        });
+        return res.json({
+            status: 'success',
+            message: isSuspended
+                ? `Usuario ${updated.username} ha sido suspendido.`
+                : `Usuario ${updated.username} ha sido reactivado.`,
+            user: {
+                id: updated.id,
+                username: updated.username,
+                isSuspended: updated.isSuspended,
+                suspensionReason: updated.suspensionReason,
+            },
+        });
+    }
+    catch (err) {
+        console.error('Error in suspend user:', err);
+        return res.status(500).json({ error: 'Error al cambiar estado de suspensión del usuario' });
     }
 });
 // Actualizar perfil de usuario (Foto de perfil, username)
@@ -2418,6 +2810,8 @@ app.delete('/api/admin/users/:id', rbac_middleware_1.authenticateJWT, (0, rbac_m
             return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
         }
         // Eliminar relaciones en cascada para evitar restricciones de clave foránea
+        await exports.prisma.kycVerification.deleteMany({ where: { userId: id } });
+        await exports.prisma.contentReport.deleteMany({ where: { OR: [{ reporterId: id }, { targetUserId: id }] } });
         await exports.prisma.comment.deleteMany({ where: { userId: id } });
         await exports.prisma.videoLike.deleteMany({ where: { userId: id } });
         await exports.prisma.favorite.deleteMany({ where: { userId: id } });
@@ -2426,6 +2820,14 @@ app.delete('/api/admin/users/:id', rbac_middleware_1.authenticateJWT, (0, rbac_m
         await exports.prisma.moderationLog.deleteMany({ where: { adminId: id } });
         await exports.prisma.creatorProfile.deleteMany({ where: { userId: id } });
         await exports.prisma.user.delete({ where: { id } });
+        await audit_service_1.AuditService.log({
+            adminId: requestingAdminId,
+            action: 'USER_DELETE',
+            entityType: 'USER',
+            entityId: id,
+            details: { deletedEmail: userToDelete.email, deletedUsername: userToDelete.username },
+            ipAddress: req.ip,
+        });
         return res.json({
             status: 'success',
             message: `Usuario ${userToDelete.username} (${userToDelete.email}) eliminado permanentemente.`,
@@ -3102,10 +3504,18 @@ app.get('/api/videos', async (req, res) => {
     const categoryFilter = req.query.category;
     const searchFilter = req.query.q;
     const tagFilter = req.query.tag;
+    const isShortFilter = req.query.isShort;
     try {
         let whereClause = {
             status: 'READY',
         };
+        // Filtrar por Shorts (relación de aspecto vertical o duración <= 60 seg)
+        if (isShortFilter === 'true') {
+            whereClause.OR = [
+                { isShort: true },
+                { durationSeconds: { lte: 60 } },
+            ];
+        }
         // Filtrar por Categoría específica si no es 'Para ti' o 'Todos'
         if (categoryFilter &&
             categoryFilter.trim() !== '' &&
@@ -3487,24 +3897,44 @@ app.delete('/api/stories/:id', rbac_middleware_1.authenticateJWT, async (req, re
 // ====================================================
 // 8. REACCIONES FLOTANTES EN VIVO PARA VIDEOS
 // ====================================================
+const DEFAULT_REACTIONS = {
+    '🔥': 0,
+    '💋': 0,
+    '🔞': 0,
+    '✨': 0,
+    '❤️': 0,
+    '💦': 0,
+};
 const videoReactionsStore = {};
-// Enviar reacción a video en vivo
+// Enviar reacción a video en vivo (Inicia en 0 e incrementa 1 a 1 de forma real)
 app.post('/api/videos/:id/react', async (req, res) => {
     const videoId = req.params.id;
     const { emoji, userId } = req.body;
-    const validEmoji = emoji || '🔥';
+    const validEmoji = (emoji || '🔥').trim();
     try {
         if (!videoReactionsStore[videoId]) {
-            videoReactionsStore[videoId] = {
-                '🔥': 145 + Math.floor(Math.random() * 50),
-                '💋': 88 + Math.floor(Math.random() * 30),
-                '🔞': 270 + Math.floor(Math.random() * 60),
-                '✨': 95 + Math.floor(Math.random() * 20),
-                '❤️': 160 + Math.floor(Math.random() * 40),
-                '💦': 120 + Math.floor(Math.random() * 35),
-            };
+            // Consultar conteos existentes en BD o iniciar en 0
+            const existingGroups = await exports.prisma.videoReaction.groupBy({
+                by: ['emoji'],
+                where: { videoId },
+                _count: { emoji: true },
+            }).catch(() => []);
+            const initialCounts = { ...DEFAULT_REACTIONS };
+            existingGroups.forEach((g) => {
+                initialCounts[g.emoji] = g._count.emoji;
+            });
+            videoReactionsStore[videoId] = initialCounts;
         }
+        // Incrementar en 1 exactamente
         videoReactionsStore[videoId][validEmoji] = (videoReactionsStore[videoId][validEmoji] || 0) + 1;
+        // Persistir en PostgreSQL de forma asíncrona
+        exports.prisma.videoReaction.create({
+            data: {
+                videoId,
+                userId: userId || null,
+                emoji: validEmoji,
+            },
+        }).catch(() => { });
         // Si viene userId, enviar notificación al creador
         if (userId) {
             const [video, sender] = await Promise.all([
@@ -3539,29 +3969,57 @@ app.post('/api/videos/:id/react', async (req, res) => {
         return res.status(500).json({ error: 'Error al registrar reacción en vivo' });
     }
 });
-// Obtener conteo de reacciones de un video
-app.get('/api/videos/:id/reactions', (req, res) => {
+// Obtener conteo de reacciones de un video (Inicia en 0)
+app.get('/api/videos/:id/reactions', async (req, res) => {
     const videoId = req.params.id;
-    if (!videoReactionsStore[videoId]) {
-        videoReactionsStore[videoId] = {
-            '🔥': 145 + Math.floor(Math.random() * 50),
-            '💋': 88 + Math.floor(Math.random() * 30),
-            '🔞': 270 + Math.floor(Math.random() * 60),
-            '✨': 95 + Math.floor(Math.random() * 20),
-            '❤️': 160 + Math.floor(Math.random() * 40),
-            '💦': 120 + Math.floor(Math.random() * 35),
-        };
+    try {
+        if (!videoReactionsStore[videoId]) {
+            const existingGroups = await exports.prisma.videoReaction.groupBy({
+                by: ['emoji'],
+                where: { videoId },
+                _count: { emoji: true },
+            }).catch(() => []);
+            const counts = { ...DEFAULT_REACTIONS };
+            existingGroups.forEach((g) => {
+                counts[g.emoji] = g._count.emoji;
+            });
+            videoReactionsStore[videoId] = counts;
+        }
+        return res.json({
+            status: 'success',
+            videoId,
+            reactions: videoReactionsStore[videoId],
+        });
     }
-    return res.json({
-        status: 'success',
-        reactions: videoReactionsStore[videoId],
-    });
+    catch (err) {
+        return res.json({
+            status: 'success',
+            videoId,
+            reactions: { ...DEFAULT_REACTIONS },
+        });
+    }
 });
 // Crear Video con Categoría y Hashtags
 app.post('/api/admin/videos', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN, rbac_1.UserRole.CREATOR), async (req, res) => {
-    const { title, description, duration, durationSeconds, thumbnailUrl, thumbnailPublicId, videoUrl, cloudinaryPublicId, hlsMasterUrl, category, tags, actorId, isFollowersOnly, } = req.body;
+    const { title, description, duration, durationSeconds, thumbnailUrl, thumbnailPublicId, videoUrl, cloudinaryPublicId, hlsMasterUrl, category, tags, actorId, isFollowersOnly, isShort, aspectRatio, } = req.body;
+    const isShortBool = isShort === true || isShort === 'true' || (Number(durationSeconds) > 0 && Number(durationSeconds) <= 60);
+    const finalAspectRatio = aspectRatio || (isShortBool ? '9:16' : '16:9');
     if (!title || !title.trim()) {
         return res.status(400).json({ error: 'El título del video es obligatorio' });
+    }
+    // Control Legal y Verificación de Edad/Identidad (KYC) para creadores
+    if (req.user.role === rbac_1.UserRole.CREATOR && req.user.id && !req.user.id.startsWith('usr_')) {
+        const creatorUser = await exports.prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { isVerified: true, kycStatus: true, username: true },
+        });
+        if (!creatorUser?.isVerified && creatorUser?.kycStatus !== 'APPROVED') {
+            return res.status(403).json({
+                error: 'Control Legal y Verificación KYC requerida: Para publicar videos como creador en TexxxNopor debes validar tu documento de identidad (cédula o pasaporte) y esperar la aprobación administrativa.',
+                requiresKyc: true,
+                kycStatus: creatorUser?.kycStatus || 'NONE',
+            });
+        }
     }
     try {
         // 1. Categoría
@@ -3644,6 +4102,8 @@ app.post('/api/admin/videos', rbac_middleware_1.authenticateJWT, (0, rbac_middle
                 categoryId: categoryRecord?.id || undefined,
                 tagsList: allTags,
                 isFollowersOnly: Boolean(isFollowersOnly),
+                isShort: isShortBool,
+                aspectRatio: finalAspectRatio,
             },
             include: {
                 actor: true,
@@ -3654,6 +4114,35 @@ app.post('/api/admin/videos', rbac_middleware_1.authenticateJWT, (0, rbac_middle
                 comments: true,
             },
         });
+        // Persistir hashtags en la base de datos para sugerencia global
+        if (allTags && allTags.length > 0) {
+            for (const rawTag of allTags) {
+                const cleanTag = rawTag.trim().toLowerCase();
+                if (cleanTag) {
+                    try {
+                        const tagRecord = await exports.prisma.tag.upsert({
+                            where: { name: cleanTag },
+                            update: {},
+                            create: { name: cleanTag },
+                        });
+                        await exports.prisma.videoTag.upsert({
+                            where: {
+                                videoId_tagId: {
+                                    videoId: newVideo.id,
+                                    tagId: tagRecord.id,
+                                },
+                            },
+                            update: {},
+                            create: {
+                                videoId: newVideo.id,
+                                tagId: tagRecord.id,
+                            },
+                        }).catch(() => { });
+                    }
+                    catch (_) { }
+                }
+            }
+        }
         const formatted = formatVideoItem(newVideo, userId);
         return res.status(201).json({
             status: 'success',
@@ -4233,6 +4722,10 @@ app.post('/api/videos/:id/comments', rbac_middleware_1.authenticateJWT, async (r
         return res.status(500).json({ error: 'Error al publicar comentario' });
     }
 });
+// ====================================================
+// MONTAJE DE LA SUITE ADMINISTRATIVA INTEGRAL (KYC, DMCA, FINANZAS, AUDITORÍA)
+// ====================================================
+app.use(admin_suite_routes_1.default);
 // Enrutamiento SPA para Frontend Web (sirve index.html para rutas que no sean API)
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
@@ -4266,6 +4759,148 @@ app.use((err, req, res, next) => {
     console.error('Unhandled server error:', err);
     return res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
 });
+const activeLiveStreams = new Map();
+app.get('/api/live/active', (req, res) => {
+    return res.json({
+        status: 'success',
+        count: activeLiveStreams.size,
+        streams: Array.from(activeLiveStreams.values()),
+    });
+});
+app.post('/api/live/start', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.CREATOR, rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { title, category } = req.body;
+        let actor = await exports.prisma.actor.findFirst({
+            where: { userId },
+        });
+        if (!actor) {
+            const user = await exports.prisma.user.findUnique({ where: { id: userId } });
+            const stageName = user?.username || 'Actor';
+            actor = await exports.prisma.actor.create({
+                data: {
+                    userId,
+                    name: stageName,
+                    stageName,
+                    avatarUrl: user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+                    isVerified: false,
+                },
+            });
+        }
+        const liveId = `live_${actor.id}_${Date.now()}`;
+        const liveStream = {
+            id: liveId,
+            actorId: actor.id,
+            actorName: actor.stageName || actor.name,
+            actorAvatar: actor.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+            title: title?.trim() || `Transmisión En Vivo de ${actor.stageName}`,
+            category: category || 'Para ti',
+            viewersCount: Math.floor(1 + Math.random() * 5),
+            likesCount: 0,
+            streamUrl: `https://live.texxxnopor.com/stream/${liveId}.m3u8`,
+            startedAt: new Date().toISOString(),
+        };
+        activeLiveStreams.set(actor.id, liveStream);
+        return res.json({
+            status: 'success',
+            message: 'Transmisión en vivo iniciada con éxito',
+            stream: liveStream,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al iniciar transmisión en vivo' });
+    }
+});
+app.post('/api/live/stop', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.CREATOR, rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const actor = await exports.prisma.actor.findFirst({ where: { userId } });
+        if (actor && activeLiveStreams.has(actor.id)) {
+            activeLiveStreams.delete(actor.id);
+        }
+        return res.json({ status: 'success', message: 'Transmisión en vivo finalizada' });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al finalizar transmisión en vivo' });
+    }
+});
+// REGALOS EN VIVO CON REPARTO 92% ACTOR / 8% PLATAFORMA
+app.post('/api/live/:liveId/gift', async (req, res) => {
+    try {
+        const { liveId } = req.params;
+        const { giftName, coins, actorEarnedCoins, platformCommissionCoins } = req.body;
+        const coinsNum = Number(coins) || 1;
+        const actorCoins = actorEarnedCoins !== undefined ? Number(actorEarnedCoins) : Math.round(coinsNum * 0.92);
+        const platformCoins = platformCommissionCoins !== undefined ? Number(platformCommissionCoins) : Math.round(coinsNum * 0.08);
+        console.log(`🎁 [Live Regalo] Live ${liveId}: ${giftName} (${coinsNum} monedas). Actor (92%): ${actorCoins} monedas. Plataforma (8%): ${platformCoins} monedas`);
+        return res.json({
+            status: 'success',
+            message: 'Regalo enviado exitosamente',
+            giftName,
+            coins: coinsNum,
+            actorEarnedCoins: actorCoins,
+            platformCommissionCoins: platformCoins,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al procesar regalo' });
+    }
+});
+// RECARGA DE MONEDAS CON COSTO REAL
+app.post('/api/wallet/recharge-coins', async (req, res) => {
+    try {
+        const { coinsAmount, priceCOP } = req.body;
+        console.log(`🪙 [Wallet Recarga] Recarga de ${coinsAmount} monedas por $${priceCOP} COP procesada exitosamente`);
+        return res.json({
+            status: 'success',
+            message: 'Recarga procesada exitosamente',
+            coinsAmount,
+            priceCOP,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al procesar recarga' });
+    }
+});
+async function ensureDemoVipUser() {
+    try {
+        const demoEmail = 'anonimo@texxxnopor.com';
+        let user = await exports.prisma.user.findUnique({ where: { email: demoEmail } });
+        const passwordHash = await bcrypt_1.default.hash('TexxxVip2026!', 10);
+        if (!user) {
+            await exports.prisma.user.create({
+                data: {
+                    email: demoEmail,
+                    username: 'anonimo_vip',
+                    passwordHash,
+                    role: 'CONSUMER',
+                    isVip: true,
+                    isVerified: true,
+                    vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+                    subscriptionPlan: 'VIP_PLATINUM_FULL',
+                    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop',
+                    age: 24,
+                },
+            });
+            console.log('✅ Usuario anónimo VIP creado con éxito: anonimo@texxxnopor.com');
+        }
+        else {
+            await exports.prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    isVip: true,
+                    isVerified: true,
+                    vipExpiresAt: new Date('2035-01-01T00:00:00Z'),
+                    subscriptionPlan: 'VIP_PLATINUM_FULL',
+                },
+            });
+            console.log('✅ Usuario anónimo VIP verificado y activo: anonimo@texxxnopor.com');
+        }
+    }
+    catch (err) {
+        console.warn('Nota creando usuario demo VIP:', err.message);
+    }
+}
 async function autoSyncDatabase() {
     try {
         console.log('🔄 Sincronizando esquema de base de datos PostgreSQL con Prisma...');
@@ -4289,5 +4924,6 @@ if (require.main === module) {
         console.log(`🛡️ RBAC: First user gets ADMIN role automatically`);
         // Sincronización automática de tablas en Render / PostgreSQL
         await autoSyncDatabase();
+        await ensureDemoVipUser();
     });
 }

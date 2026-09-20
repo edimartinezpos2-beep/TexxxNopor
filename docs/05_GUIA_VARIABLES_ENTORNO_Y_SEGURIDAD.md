@@ -1,7 +1,7 @@
 # 🔐 Guía de Variables de Entorno, Credenciales y Seguridad
 
 **Plataforma de Streaming TexxxNopor**  
-*Versión:* `1.0.2` | *Manual de Configuración y Seguridad*
+*Versión:* `1.0.3` | *Manual de Configuración, Ciberseguridad y Operaciones*
 
 ---
 
@@ -12,25 +12,25 @@ A continuación se detalla cada una de las variables requeridas en el archivo `.
 ### A. Configuración del Servidor y Base de Datos
 | Variable | Tipo / Formato | Descripción | Ejemplo |
 | :--- | :--- | :--- | :--- |
-| `PORT` | Numérico | Puerto de escucha del servidor Express | `4000` |
+| `PORT` | Numérico | Puerto de escucha local del servidor Express | `4000` |
 | `NODE_ENV` | String | Entorno de ejecución (`development` o `production`) | `production` |
-| `DATABASE_URL` | URI PostgreSQL | Cadena de conexión segura con Prisma ORM | `postgresql://user:pass@ep-host.render.com/db_texxxnopor?sslmode=require` |
-| `JWT_SECRET` | String secreto | Clave para firmar y verificar tokens de autenticación | `super-secret-texxxnopor-jwt-key-2026` |
+| `DATABASE_URL` | URI PostgreSQL | Cadena de conexión segura a PostgreSQL con Prisma ORM | `postgresql://user:pass@host.render.com/db_texxxnopor?sslmode=require` |
+| `JWT_SECRET` | String Secreto | Clave criptográfica para firmar y verificar tokens de sesión | `super-secret-texxxnopor-jwt-key-2026` |
 
-### B. Bunny.net (Almacenamiento Edge y CDN de Video +18)
+### B. Bunny.net (Almacenamiento Edge y CDN de Video Adulto +18)
 | Variable | Tipo / Formato | Descripción | Ejemplo |
 | :--- | :--- | :--- | :--- |
 | `BUNNY_STORAGE_ZONE_NAME` | String | Nombre de la zona de almacenamiento en Bunny | `texxxnopor` |
-| `BUNNY_ACCESS_KEY` | UUID / Clave API | Contraseña de acceso a la Storage Zone | `fbcd62d0-a06e-4816-944217d8df7a-4a63-4601` |
-| `BUNNY_STORAGE_HOSTNAME` | Hostname | Endpoint de subida de Bunny.net | `storage.bunnycdn.com` |
-| `BUNNY_CDN_HOSTNAME` | Hostname / CDN | Dominio de entrega rápida para streaming HLS | `texxxnopor.b-cdn.net` |
+| `BUNNY_ACCESS_KEY` | UUID / Clave API | Contraseña de acceso a la Storage Zone de Bunny | `fbcd62d0-a06e-4816-944217d8df7a-4a63-4601` |
+| `BUNNY_STORAGE_HOSTNAME` | Hostname | Endpoint regional de subida de Bunny.net | `storage.bunnycdn.com` |
+| `BUNNY_CDN_HOSTNAME` | Hostname / CDN | Dominio de entrega ultra rápida para streaming HLS | `texxxnopor.b-cdn.net` |
 
-### C. Cloudinary Media Gateway (Subidas e Imágenes)
+### C. Cloudinary Media Gateway (Miniaturas y Assets)
 | Variable | Tipo / Formato | Descripción | Ejemplo |
 | :--- | :--- | :--- | :--- |
 | `CLOUDINARY_CLOUD_NAME` | String | Nombre de cuenta en Cloudinary | `djw...` |
-| `CLOUDINARY_API_KEY` | Numérico | Llave pública de API | `49281928491` |
-| `CLOUDINARY_API_SECRET` | String | Secreto de API para firma de subidas | `AbCdEfGhIjKlMnOpQrStUvWxYz` |
+| `CLOUDINARY_API_KEY` | Numérico | Llave pública de API de Cloudinary | `49281928491` |
+| `CLOUDINARY_API_SECRET` | String | Secreto de API para firma de subidas seguras | `AbCdEfGhIjKlMnOpQrStUvWxYz` |
 
 ### D. Pasarela de Pagos Wompi (Bancolombia)
 | Variable | Tipo / Formato | Descripción | Ejemplo |
@@ -39,78 +39,120 @@ A continuación se detalla cada una de las variables requeridas en el archivo `.
 | `WOMPI_PUBLIC_KEY` | String | Llave pública (`pub_test_...` o `pub_prod_...`) | `pub_test_Q5yDA9xoKdePzhSGeVe9KStXTIHsIOXD` |
 | `WOMPI_PRIVATE_KEY` | String | Llave privada (`prv_test_...` o `prv_prod_...`) | `prv_test_5jMh8lV6U2wX7yZ0a1b2c3d4e5f6g7h8` |
 | `WOMPI_INTEGRITY_SECRET` | String | Secreto para generación de firmas SHA-256 | `integrity_test_sample_secret` |
-| `WOMPI_EVENTS_SECRET` | String | Secreto de validación de Webhooks | `events_test_sample_secret` |
+| `WOMPI_EVENTS_SECRET` | String | Secreto de validación de Webhooks en segundo plano | `events_test_sample_secret` |
 
-### E. Control y Caducidad de Versiones (Force Update)
+### E. Control de Versiones, Caducidad y Enlace Permanente de APK
 | Variable | Tipo / Formato | Descripción | Ejemplo |
 | :--- | :--- | :--- | :--- |
-| `APP_LATEST_VERSION` | SemVer | Última versión lanzada de la app | `1.0.2` |
-| `APP_MIN_SUPPORTED_VERSION` | SemVer | Versión mínima permitida (bloquea anteriores) | `1.0.2` |
-| `APP_UPDATE_URL` | URL | Enlace de descarga del nuevo APK | `https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest` |
+| `APP_LATEST_VERSION` | SemVer | Última versión lanzada de la app móvil | `1.0.3` |
+| `APP_MIN_SUPPORTED_VERSION` | SemVer | Versión mínima permitida (bloquea anteriores con Force Update) | `1.0.3` |
+| `APP_UPDATE_URL` | URL Permanente | Enlace permanente de descarga del APK en la nube | `https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest` |
+| `WEB_URL` | URL | Dirección web oficial de la plataforma para redirección | `https://texxxnopor-web.onrender.com/` |
 
-### F. Recuperación de Contraseñas y Correos (Nodemailer)
+> [!IMPORTANT]
+> **Importancia Crítica de `APP_UPDATE_URL`:**  
+> Como Render utiliza almacenamiento en disco efímero, los archivos colocados en la carpeta `uploads/` se eliminan si el servidor se reinicia. Mantener `APP_UPDATE_URL` configurado en Render asegura que la descarga del APK nunca se interrumpa.
+
+### F. Servidor de Correo para Códigos OTP de 4 Dígitos (Nodemailer)
 | Variable | Tipo / Formato | Descripción | Ejemplo |
 | :--- | :--- | :--- | :--- |
-| `SMTP_HOST` | Hostname | Servidor SMTP de correo | `smtp.gmail.com` |
-| `SMTP_PORT` | Numérico | Puerto de conexión SMTP (465 o 587) | `587` |
-| `SMTP_USER` | Correo | Correo remitente oficial | `soporte.texxxnopor@gmail.com` |
-| `SMTP_PASS` | Contraseña App | Contraseña de aplicación generada en Google | `abcd efgh ijkl mnop` |
+| `SMTP_HOST` | Hostname | Servidor SMTP de correo saliente | `smtp.gmail.com` |
+| `SMTP_PORT` | Numérico | Puerto de conexión SMTP (587 para STARTTLS, 465 para SSL) | `587` |
+| `SMTP_USER` | Correo | Correo remitente oficial de TexxxNopor | `soporte.texxxnopor@gmail.com` |
+| `SMTP_PASS` | Contraseña App | Contraseña de aplicación generada en la cuenta de Google | `xxxx xxxx xxxx xxxx` |
 
 ---
 
 ## 2. Plantilla de Archivo `.env` Completa para el Backend
 
 ```env
-# Servidor Express y Base de Datos
+# ================================================================
+# SERVIDOR EXPRESS Y BASE DE DATOS
+# ================================================================
 PORT=4000
 NODE_ENV=production
 DATABASE_URL="postgresql://usuario:password@host-render.com/texxxnopor_db?sslmode=require"
 JWT_SECRET="super-secret-texxxnopor-production-jwt-key-2026"
 
-# Almacenamiento Bunny.net (+18 Streaming CDN)
+# ================================================================
+# ALMACENAMIENTO BUNNY.NET (+18 STREAMING CDN)
+# ================================================================
 BUNNY_STORAGE_ZONE_NAME="texxxnopor"
 BUNNY_ACCESS_KEY="fbcd62d0-a06e-4816-944217d8df7a-4a63-4601"
 BUNNY_STORAGE_HOSTNAME="storage.bunnycdn.com"
 BUNNY_CDN_HOSTNAME="texxxnopor.b-cdn.net"
 
-# Cloudinary Media
+# ================================================================
+# CLOUDINARY MEDIA GATEWAY (IMÁGENES Y ASSETS)
+# ================================================================
 CLOUDINARY_CLOUD_NAME="texxxnopor-cloud"
 CLOUDINARY_API_KEY="123456789012345"
 CLOUDINARY_API_SECRET="abcdefghijklmnopqrstuvwxyz12345"
 
-# Pasarela Wompi Bancolombia (Sandbox / Producción)
+# ================================================================
+# PASARELA WOMPI BANCOLOMBIA (SANDBOX / PRODUCCIÓN)
+# ================================================================
 WOMPI_API_URL="https://sandbox.wompi.co/v1"
 WOMPI_PUBLIC_KEY="pub_test_XXXXX"
 WOMPI_PRIVATE_KEY="prv_test_XXXXX"
 WOMPI_INTEGRITY_SECRET="integrity_test_XXXXX"
 WOMPI_EVENTS_SECRET="events_test_XXXXX"
 
-# Control de Versiones (Force Update)
-APP_LATEST_VERSION="1.0.2"
-APP_MIN_SUPPORTED_VERSION="1.0.2"
+# ================================================================
+# CONTROL DE VERSIONES Y DISTRIBUCIÓN DE APK
+# ================================================================
+APP_LATEST_VERSION="1.0.3"
+APP_MIN_SUPPORTED_VERSION="1.0.3"
 APP_UPDATE_URL="https://github.com/edimartinezpos2-beep/TexxxNopor/releases/latest"
+WEB_URL="https://texxxnopor-web.onrender.com/"
 
-# Servidor de Correo para Códigos de 6 Dígitos
+# ================================================================
+# SERVICIO DE CORREO (CÓDIGOS OTP 4 DÍGITOS TIKTOK DECK)
+# ================================================================
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT=587
-SMTP_USER="texxxnopor.app@gmail.com"
+SMTP_USER="soporte.texxxnopor@gmail.com"
 SMTP_PASS="xxxx xxxx xxxx xxxx"
 ```
 
 ---
 
-## 3. Políticas de Seguridad y Buenas Prácticas
+## 3. Variables de Entorno para el Frontend Universal (`mobile/`)
 
-1. **Protección del Archivo `.env`:**
-   - El archivo `.env` está incluido en `.gitignore` y **nunca debe subirse al repositorio público de GitHub**.
-   - En Render, las variables se configuran exclusivamente en la pestaña **Environment**.
+En el proyecto unificado `mobile/`, las variables públicas que se compilan tanto para el APK nativo como para la web de Render utilizan el prefijo `EXPO_PUBLIC_`:
 
-2. **Rotación de Claves Secretas:**
-   - Se recomienda cambiar el `JWT_SECRET` periódicamente si se detecta actividad sospechosa (esto invalidará sesiones antiguas de forma segura).
+```env
+# URL base del Backend en Render
+EXPO_PUBLIC_API_URL="https://texxxnopor-backend.onrender.com"
 
-3. **Copias de Seguridad (Backups) de PostgreSQL:**
-   - En Render o Neon, las bases de datos PostgreSQL cuentan con respaldos automáticos diarios.
-   - Para generar un respaldo manual local:
+# Enlace directo de Checkout oficial de Wompi
+EXPO_PUBLIC_WOMPI_URL="https://checkout.wompi.co/l/VPOS_4BlRq7"
+
+# URL pública de la web oficial
+EXPO_PUBLIC_WEB_URL="https://texxxnopor-web.onrender.com/"
+```
+
+---
+
+## 4. Políticas de Ciberseguridad y Buenas Prácticas
+
+1. **Protección Estricta de Secretos:**
+   - Los archivos `.env` están listados en el archivo `.gitignore` y **jamás deben comitearse al repositorio público**.
+   - En Render, todos los valores se configuran de forma segura y cifrada en la sección **Environment**.
+
+2. **Cifrado de Contraseñas y Datos Sensibles:**
+   - Las contraseñas de los usuarios se procesan mediante **bcrypt** con 10 rondas de salt antes de registrarse en la base de datos PostgreSQL.
+   - Las contraseñas en texto plano nunca se registran en consolas ni archivos de log.
+
+3. **Resiliencia en el Envío de Códigos OTP:**
+   - En [backend/src/services/emailService.ts](file:///c:/Users/Usuario/Desktop/TexxxNopor/backend/src/services/emailService.ts), las peticiones SMTP cuentan con un tiempo límite de carrera (*Promise.race*) de **3.5 segundos**, garantizando que si el proveedor de correos demora o está en reposo, el usuario no quede bloqueado en un estado de carga indefinido.
+
+4. **Validación Obligatoria de Mayoría de Edad (+18 Gate):**
+   - Se ejecuta una verificación dual (en cliente y en backend): cualquier intento de registro con edad inferior a 18 años o sin el consentimiento afirmativo es rechazado inmediatamente con código HTTP 400.
+
+5. **Copias de Seguridad (Backups) de PostgreSQL:**
+   - En Render o Neon, la base de datos cuenta con respaldos automáticos diarios gestionados.
+   - Para realizar un volcado manual de seguridad:
      ```bash
-     pg_dump "TU_DATABASE_URL" > backup_texxxnopor.sql
+     pg_dump "TU_DATABASE_URL" > backup_texxxnopor_$(date +%F).sql
      ```

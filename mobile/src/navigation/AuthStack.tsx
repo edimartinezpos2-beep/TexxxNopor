@@ -122,6 +122,116 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const otpInputRef = React.useRef<TextInput>(null);
+
+  // Animaciones estilo TikTok "Hand of Cards" OTP Deck
+  const fanAnims = React.useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  const elevateAnims = React.useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  const popAnims = React.useRef([
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+  ]).current;
+
+  const glowAnim = React.useRef(new Animated.Value(0.4)).current;
+  const prevCodeLength = React.useRef(resetCode.length);
+
+  // Efecto de pulso luminoso en la carta activa
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0.4, duration: 800, useNativeDriver: false }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  // Animación de reparto / apertura en abanico ("Deal / Fan out")
+  useEffect(() => {
+    if (codeSent) {
+      fanAnims.forEach((anim) => anim.setValue(0));
+      Animated.stagger(
+        80,
+        fanAnims.map((anim) =>
+          Animated.spring(anim, {
+            toValue: 1,
+            tension: 55,
+            friction: 7,
+            useNativeDriver: true,
+          })
+        )
+      ).start();
+    }
+  }, [codeSent]);
+
+  // Animación reactiva al teclear dígitos (Elevación de la carta activa, pop de entrada y ola final)
+  useEffect(() => {
+    const currentLen = resetCode.length;
+
+    // Si se escribió un dígito nuevo, activar el pop de impacto en esa carta
+    if (currentLen > prevCodeLength.current && currentLen > 0) {
+      const typedIdx = currentLen - 1;
+      if (popAnims[typedIdx]) {
+        popAnims[typedIdx].setValue(1.26);
+        Animated.spring(popAnims[typedIdx], {
+          toValue: 1,
+          friction: 4,
+          tension: 180,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+    prevCodeLength.current = currentLen;
+
+    // Elevar la carta activa actual hacia arriba (-18px) y reposar las demás
+    elevateAnims.forEach((anim, idx) => {
+      const isCurrentActive = idx === currentLen;
+      Animated.spring(anim, {
+        toValue: isCurrentActive ? 1 : 0,
+        friction: 6,
+        tension: 80,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    // Celebración: ola en cascada cuando se completan los 4 dígitos
+    if (currentLen === 4) {
+      Animated.stagger(
+        60,
+        elevateAnims.map((anim) =>
+          Animated.sequence([
+            Animated.timing(anim, { toValue: 1.25, duration: 110, useNativeDriver: true }),
+            Animated.spring(anim, { toValue: 0.1, friction: 5, useNativeDriver: true }),
+          ])
+        )
+      ).start();
+    }
+  }, [resetCode]);
+
+  // Función para autocompletar animadamente (al presionar la sugerencia del video)
+  const autoFillCode = (codeToFill = '1234') => {
+    setResetCode('');
+    codeToFill.split('').forEach((char, i) => {
+      setTimeout(() => {
+        setResetCode((prev) => (prev + char).slice(0, 4));
+      }, (i + 1) * 160);
+    });
+  };
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -264,10 +374,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
       const res = await api.auth.forgotPassword(cleanEmail);
       if (res && res.status === 'success') {
         setCodeSent(true);
-        if (res.code) {
-          setResetCode(res.code);
-        }
-        setSuccessMessage('¡Correo enviado! Revisa tu bandeja de entrada y sigue las instrucciones.');
+        setResetCode('');
+        setSuccessMessage('¡Correo enviado! Revisa tu bandeja de entrada y digita las 4 cartas.');
       } else {
         setRecoveryError('No encontramos ninguna cuenta con ese correo electrónico.');
         triggerShake();
@@ -276,8 +384,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
       // Fallback amigable si el servidor tarda o está offline
       console.log('[Recovery Mobile] Activando flujo resiliente...');
       setCodeSent(true);
-      setResetCode('123456');
-      setSuccessMessage('Hemos enviado el código de recuperación a tu correo.');
+      setResetCode('');
+      setSuccessMessage('Hemos enviado el código de 4 cartas a tu correo.');
     } finally {
       setIsLoading(false);
     }
@@ -288,8 +396,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!resetCode.trim()) {
-      setErrorMessage('Por favor ingresa el código de 6 dígitos recibido.');
+    if (!resetCode.trim() || resetCode.length < 4) {
+      setErrorMessage('Por favor completa el código de 4 dígitos en las cartas.');
       return;
     }
 
@@ -392,21 +500,40 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
           </TouchableOpacity>
         )}
 
-        {/* Header de la marca con Logo Oficial o Header Cyberpunk para Recuperar Contraseña */}
+        {/* Header de la marca o Header de la Ventana OTP Verification DECK (TikTok Style) */}
         {authMode === 'FORGOT_PASSWORD' ? (
-          <View style={styles.cyberHeaderRow}>
-            <View style={styles.cyberBrandBadge}>
-              <Flame size={18} color="#E50914" />
-              <Text style={styles.cyberBrandText}>TexxxNopor</Text>
+          <>
+            <View style={styles.deckWindowHeader}>
+              <View style={styles.deckMacDots}>
+                <View style={[styles.deckMacDot, { backgroundColor: '#FF5F56' }]} />
+                <View style={[styles.deckMacDot, { backgroundColor: '#FFBD2E' }]} />
+                <View style={[styles.deckMacDot, { backgroundColor: '#27C93F' }]} />
+              </View>
+
+              <View style={styles.deckCenterPill}>
+                <Shield size={12} color="#60A5FA" style={{ marginRight: 4 }} />
+                <Text style={styles.deckPillText}>OTP Verification</Text>
+                <View style={styles.deckBadgeSmall}>
+                  <Text style={styles.deckBadgeSmallText}>DECK</Text>
+                </View>
+              </View>
+
+              <View style={styles.deckTechBadges}>
+                <Text style={[styles.deckTechBadge, { color: '#FF5F56' }]}>HTML</Text>
+                <Text style={[styles.deckTechBadge, { color: '#E2E8F0' }]}>CSS</Text>
+                <Text style={[styles.deckTechBadge, { color: '#FBBF24' }]}>JS</Text>
+              </View>
+
+              <Text style={styles.deckPathText}>localhost / otp-deck</Text>
             </View>
-            <View style={styles.cyberDivider} />
-            <Text style={styles.cyberHeaderTitle}>Recuperación de cuenta</Text>
-            <View style={{ flex: 1 }} />
-            <View style={styles.cyberSecureBadge}>
-              <View style={styles.cyberPulsingDot} />
-              <Text style={styles.cyberSecureText}>256-BIT</Text>
+
+            <View style={styles.deckTitleArea}>
+              <Text style={styles.deckComponentLabel}>COMPONENT · 100</Text>
+              <Text style={styles.deckMainTitle}>
+                OTP Verification <Text style={{ color: '#E50914' }}>DECK</Text>
+              </Text>
             </View>
-          </View>
+          </>
         ) : (
           <View style={styles.brandHeader}>
             <BrandLogo size="large" showSubtitle />
@@ -489,144 +616,276 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
         ) : null}
 
         {/* ==================================================== */}
-        {/* VISTA 1: RECUPERAR CONTRASEÑA CON CÓDIGO DE 6 DÍGITOS */}
+        {/* VISTA 1: RECUPERAR CONTRASEÑA - OTP VERIFICATION DECK */}
         {/* ==================================================== */}
         {authMode === 'FORGOT_PASSWORD' ? (
           <View style={{ width: '100%' }}>
-            {/* Tarjeta de Recuperación con animación Shake */}
-            <Animated.View style={[styles.cyberCard, { transform: [{ translateX: shakeAnim }] }]}>
-              {/* Píldora ACCOUNT RECOVERY */}
-              <View style={styles.cyberPillContainer}>
-                <View style={styles.cyberPill}>
-                  <KeyRound size={12} color="#E50914" />
-                  <Text style={styles.cyberPillText}>ACCOUNT RECOVERY</Text>
-                </View>
-              </View>
+            <Animated.View style={[styles.deckCard, { transform: [{ translateX: shakeAnim }] }]}>
+              {/* Drag Handle superior */}
+              <View style={styles.deckDragHandle} />
 
-              {/* Título Principal */}
-              <Text style={styles.cyberCardTitle}>
-                {!codeSent ? '¿Olvidaste tu contraseña?' : '¡Correo enviado!'}
-              </Text>
-
-              {/* Descripción */}
-              <Text style={styles.cyberCardDesc}>
-                {!codeSent
-                  ? 'No te preocupes. Ingresa el correo electrónico asociado a tu cuenta y te ayudaremos a recuperar el acceso.'
-                  : `Hemos enviado un enlace y código de recuperación a tu correo electrónico. Revisa tu bandeja de entrada y sigue las instrucciones.`}
-              </Text>
-
-              {/* Campo de Correo Electrónico */}
-              <View style={styles.cyberInputContainer}>
-                <View
-                  style={[
-                    styles.cyberInputWrapper,
-                    recoveryEmailFocused && styles.cyberInputWrapperFocused,
-                    recoveryError ? styles.cyberInputWrapperError : null,
-                  ]}
-                >
-                  <Mail
-                    size={18}
-                    color={recoveryError ? '#FF3366' : recoveryEmailFocused ? '#E50914' : '#64748B'}
-                    style={{ marginRight: 10 }}
-                  />
-                  <TextInput
-                    style={styles.cyberTextInput}
-                    placeholder="Ingresa tu correo electrónico"
-                    placeholderTextColor="#64748B"
-                    value={email}
-                    onChangeText={(val) => {
-                      setEmail(val);
-                      if (recoveryError) setRecoveryError('');
-                    }}
-                    onFocus={() => setRecoveryEmailFocused(true)}
-                    onBlur={() => setRecoveryEmailFocused(false)}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!codeSent && !isLoading}
-                  />
-                </View>
-
-                {/* Mensaje de error discreto */}
-                {recoveryError ? (
-                  <View style={styles.cyberDiscreteError}>
-                    <AlertTriangle size={13} color="#FF3366" />
-                    <Text style={styles.cyberDiscreteErrorText}>{recoveryError}</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* Paso 2: Código y Nueva Contraseña cuando codeSent es true */}
-              {codeSent && (
+              {!codeSent ? (
+                /* PASO 1: Ingreso de correo electrónico */
                 <>
-                  <View style={styles.cyberInputContainer}>
-                    <Text style={styles.cyberInputLabel}>Código de 6 dígitos *</Text>
-                    <View style={styles.cyberInputWrapper}>
-                      <KeyRound size={16} color="#E50914" style={{ marginRight: 10 }} />
-                      <TextInput
-                        style={[styles.cyberTextInput, { letterSpacing: 4, fontWeight: 'bold' }]}
-                        placeholder="123456"
-                        placeholderTextColor="#64748B"
-                        value={resetCode}
-                        onChangeText={setResetCode}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                      />
-                    </View>
-                  </View>
+                  <Text style={styles.deckCardTitle}>Enter your email</Text>
+                  <Text style={styles.deckCardSubtitle}>
+                    Ingresa el correo electrónico asociado a tu cuenta para recibir el código de 4 cartas.
+                  </Text>
 
-                  <View style={styles.cyberInputContainer}>
-                    <Text style={styles.cyberInputLabel}>Nueva Contraseña *</Text>
-                    <View style={styles.cyberInputWrapper}>
-                      <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
+                  <View style={[styles.cyberInputContainer, { width: '100%' }]}>
+                    <View
+                      style={[
+                        styles.cyberInputWrapper,
+                        recoveryEmailFocused && styles.cyberInputWrapperFocused,
+                        recoveryError ? styles.cyberInputWrapperError : null,
+                      ]}
+                    >
+                      <Mail
+                        size={18}
+                        color={recoveryError ? '#FF3366' : recoveryEmailFocused ? '#E50914' : '#64748B'}
+                        style={{ marginRight: 10 }}
+                      />
                       <TextInput
                         style={styles.cyberTextInput}
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Ingresa tu correo electrónico"
                         placeholderTextColor="#64748B"
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                        secureTextEntry
+                        value={email}
+                        onChangeText={(val) => {
+                          setEmail(val);
+                          if (recoveryError) setRecoveryError('');
+                        }}
+                        onFocus={() => setRecoveryEmailFocused(true)}
+                        onBlur={() => setRecoveryEmailFocused(false)}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        editable={!isLoading}
                       />
                     </View>
+
+                    {recoveryError ? (
+                      <View style={styles.cyberDiscreteError}>
+                        <AlertTriangle size={13} color="#FF3366" />
+                        <Text style={styles.cyberDiscreteErrorText}>{recoveryError}</Text>
+                      </View>
+                    ) : null}
                   </View>
 
-                  <View style={styles.cyberInputContainer}>
-                    <Text style={styles.cyberInputLabel}>Confirmar Nueva Contraseña *</Text>
-                    <View style={styles.cyberInputWrapper}>
-                      <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
-                      <TextInput
-                        style={styles.cyberTextInput}
-                        placeholder="Repite la nueva contraseña"
-                        placeholderTextColor="#64748B"
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        secureTextEntry
-                      />
-                    </View>
+                  <TouchableOpacity
+                    style={[styles.deckButton, isLoading && styles.cyberButtonLoading]}
+                    onPress={handleRequestResetCode}
+                    disabled={isLoading}
+                    activeOpacity={0.88}
+                  >
+                    {isLoading ? (
+                      <View style={styles.cyberButtonLoadingRow}>
+                        <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                        <Text style={styles.deckButtonText}>Enviando código...</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.cyberButtonLoadingRow}>
+                        <Text style={styles.deckButtonText}>Enviar código OTP</Text>
+                        <ArrowRight size={17} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                /* PASO 2: DECK DE 4 CARTAS ("HAND OF CARDS") EXACTO AL VIDEO */
+                <>
+                  <Text style={styles.deckCardTitle}>Enter your code</Text>
+                  <Text style={styles.deckCardSubtitle}>
+                    We texted a 4-digit code to{' '}
+                    <Text style={{ color: '#F1F5F9', fontWeight: 'bold' }}>
+                      {email ? `${email.slice(0, 3)}•••@${email.split('@')[1] || 'mail.com'}` : '+1 415 ••• 0142'}
+                    </Text>
+                  </Text>
+
+                  {/* MANO DE 4 CARTAS EN ABANICO ANIMADA (TIKTOK DECK) */}
+                  <View style={styles.cardsFanContainer}>
+                    {[0, 1, 2, 3].map((idx) => {
+                      const digit = resetCode[idx] || '';
+                      const isFilled = digit.length > 0;
+                      const isCurrent = idx === resetCode.length;
+
+                      const baseRotations = ['-14deg', '-4.5deg', '4.5deg', '14deg'];
+                      const baseTxValues = [-9, -3, 3, 9];
+                      const baseTyValues = [7, 0, 0, 7];
+
+                      const rotateInterpolate = fanAnims[idx].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', baseRotations[idx]],
+                      });
+
+                      const txInterpolate = fanAnims[idx].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, baseTxValues[idx]],
+                      });
+
+                      const tyBaseInterpolate = fanAnims[idx].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [25, baseTyValues[idx]],
+                      });
+
+                      const liftInterpolate = elevateAnims[idx].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -18],
+                      });
+
+                      const scaleActiveInterpolate = elevateAnims[idx].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.08],
+                      });
+
+                      return (
+                        <Animated.View
+                          key={idx}
+                          style={[
+                            styles.fanCardAnimatedWrap,
+                            {
+                              opacity: fanAnims[idx],
+                              transform: [
+                                { translateX: txInterpolate },
+                                { translateY: tyBaseInterpolate },
+                                { translateY: liftInterpolate },
+                                { rotate: rotateInterpolate },
+                                { scale: scaleActiveInterpolate },
+                                { scale: popAnims[idx] },
+                              ],
+                              zIndex: isCurrent ? 25 : isFilled ? 15 : 5 - Math.abs(1.5 - idx),
+                            },
+                          ]}
+                        >
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => otpInputRef.current?.focus()}
+                            style={[
+                              styles.fanCard,
+                              {
+                                borderColor: isCurrent ? '#E50914' : isFilled ? '#3B82F6' : '#222B3D',
+                                backgroundColor: isCurrent ? '#161D2E' : isFilled ? '#121824' : '#0E131E',
+                                shadowColor: isCurrent ? '#E50914' : isFilled ? '#3B82F6' : 'transparent',
+                                shadowOpacity: isCurrent ? 0.65 : 0.25,
+                                shadowRadius: isCurrent ? 14 : 6,
+                                elevation: isCurrent ? 12 : 5,
+                              },
+                            ]}
+                          >
+                            {isFilled ? (
+                              <Text style={styles.fanCardDigit}>{digit}</Text>
+                            ) : isCurrent ? (
+                              <Animated.View
+                                style={[
+                                  styles.fanCardEmptyDotActive,
+                                  {
+                                    opacity: glowAnim,
+                                    transform: [
+                                      {
+                                        scale: glowAnim.interpolate({
+                                          inputRange: [0.4, 1],
+                                          outputRange: [0.85, 1.3],
+                                        }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                            ) : (
+                              <View style={styles.fanCardEmptyDot} />
+                            )}
+                          </TouchableOpacity>
+                        </Animated.View>
+                      );
+                    })}
+
+                    {/* Input invisible para capturar teclado */}
+                    <TextInput
+                      ref={otpInputRef}
+                      style={styles.hiddenOtpInput}
+                      value={resetCode}
+                      onChangeText={(val) => {
+                        const clean = val.replace(/\D/g, '').slice(0, 4);
+                        setResetCode(clean);
+                        if (recoveryError) setRecoveryError('');
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      autoFocus
+                    />
                   </View>
+
+                  {/* Reenviar código */}
+                  <View style={styles.resendRow}>
+                    <Text style={styles.resendText}>Didn't get a code? </Text>
+                    <TouchableOpacity onPress={handleRequestResetCode} disabled={isLoading}>
+                      <Text style={styles.resendLink}>Resend</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Nota de ayuda interactiva idéntica al video de TikTok */}
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => autoFillCode('1234')}>
+                    <Text style={styles.deckHelperNote}>
+                      Type it, paste it, or hit Enter —{' '}
+                      <Text style={{ color: '#60A5FA', textDecorationLine: 'underline' }}>
+                        {resetCode.length === 4 ? 'código listo' : '1234 is the good one.'}
+                      </Text>
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Campos de nueva contraseña una vez ingresado el código */}
+                  {resetCode.length === 4 && (
+                    <View style={{ marginTop: 20, width: '100%' }}>
+                      <View style={styles.cyberInputContainer}>
+                        <Text style={styles.cyberInputLabel}>Nueva Contraseña *</Text>
+                        <View style={styles.cyberInputWrapper}>
+                          <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
+                          <TextInput
+                            style={styles.cyberTextInput}
+                            placeholder="Mínimo 6 caracteres"
+                            placeholderTextColor="#64748B"
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            secureTextEntry
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.cyberInputContainer}>
+                        <Text style={styles.cyberInputLabel}>Confirmar Nueva Contraseña *</Text>
+                        <View style={styles.cyberInputWrapper}>
+                          <Lock size={16} color="#64748B" style={{ marginRight: 10 }} />
+                          <TextInput
+                            style={styles.cyberTextInput}
+                            placeholder="Repite la nueva contraseña"
+                            placeholderTextColor="#64748B"
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            secureTextEntry
+                          />
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[styles.deckButton, isLoading && styles.cyberButtonLoading]}
+                        onPress={handleResetPassword}
+                        disabled={isLoading}
+                        activeOpacity={0.88}
+                      >
+                        {isLoading ? (
+                          <View style={styles.cyberButtonLoadingRow}>
+                            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                            <Text style={styles.deckButtonText}>Actualizando contraseña...</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.cyberButtonLoadingRow}>
+                            <Text style={styles.deckButtonText}>Restablecer contraseña</Text>
+                            <ArrowRight size={17} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </>
               )}
-
-              {/* Botón Principal con estado "Enviando..." y Crimson Red Brand */}
-              <TouchableOpacity
-                style={[styles.cyberButton, isLoading && styles.cyberButtonLoading]}
-                onPress={!codeSent ? handleRequestResetCode : handleResetPassword}
-                disabled={isLoading}
-                activeOpacity={0.88}
-              >
-                {isLoading ? (
-                  <View style={styles.cyberButtonLoadingRow}>
-                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.cyberButtonText}>Enviando...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.cyberButtonLoadingRow}>
-                    <Text style={styles.cyberButtonText}>
-                      {!codeSent ? 'Enviar enlace de recuperación' : 'Restablecer contraseña'}
-                    </Text>
-                    <ArrowRight size={17} color="#FFFFFF" style={{ marginLeft: 6 }} />
-                  </View>
-                )}
-              </TouchableOpacity>
 
               {/* Botón Volver al Inicio de Sesión */}
               <TouchableOpacity
@@ -637,6 +896,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onClose, initialMode = '
                   setErrorMessage('');
                   setSuccessMessage('');
                   setCodeSent(false);
+                  setResetCode('');
                 }}
                 activeOpacity={0.8}
               >
@@ -1464,5 +1724,211 @@ const styles = StyleSheet.create({
     color: '#FF3B47',
     fontSize: 13,
     fontWeight: '600',
+  },
+  deckWindowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F131D',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1E2536',
+    marginBottom: 16,
+    width: '100%',
+  },
+  deckMacDots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  deckMacDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  deckCenterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#161D2B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#243048',
+  },
+  deckPillText: {
+    color: '#CBD5E1',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  deckBadgeSmall: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginLeft: 4,
+  },
+  deckBadgeSmallText: {
+    color: '#93C5FD',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  deckTechBadges: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  deckTechBadge: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  deckPathText: {
+    color: '#64748B',
+    fontSize: 9,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  deckTitleArea: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deckComponentLabel: {
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  deckMainTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  deckCard: {
+    backgroundColor: '#101522',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#1E2638',
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
+    width: '100%',
+  },
+  deckDragHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#2E384D',
+    marginBottom: 18,
+  },
+  deckCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  deckCardSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 12,
+  },
+  cardsFanContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 130,
+    width: '100%',
+    position: 'relative',
+    marginVertical: 12,
+  },
+  fanCardAnimatedWrap: {
+    marginHorizontal: 3,
+  },
+  fanCard: {
+    width: 60,
+    height: 90,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 6 },
+  },
+  fanCardDigit: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '900',
+  },
+  fanCardEmptyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2A344A',
+  },
+  fanCardEmptyDotActive: {
+    backgroundColor: '#E50914',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  hiddenOtpInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.01,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  resendText: {
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  resendLink: {
+    color: '#E50914',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
+  },
+  deckHelperNote: {
+    color: '#64748B',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 4,
+    letterSpacing: 0.2,
+  },
+  deckButton: {
+    backgroundColor: '#E50914',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    shadowColor: '#E50914',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 5,
+    width: '100%',
+  },
+  deckButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    letterSpacing: 0.3,
   },
 });

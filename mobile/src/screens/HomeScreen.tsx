@@ -13,6 +13,7 @@ import {
   Modal,
   TextInput,
   Linking,
+  Platform,
 } from 'react-native';
 import {
   Search,
@@ -115,7 +116,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, []);
 
   const handleDownloadApk = () => {
-    const downloadUrl = api.app ? api.app.getDownloadUrl() : 'https://texxxnopor-backend.onrender.com/api/app/download-apk';
+    const downloadUrl = api.system ? api.system.getDownloadUrl() : 'https://texxxnopor-backend.onrender.com/api/app/download-apk';
     Linking.openURL(downloadUrl).catch(() => {});
   };
 
@@ -539,15 +540,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Botón Descargar APK (En la barra superior al lado del perfil) */}
-          <TouchableOpacity
-            style={styles.downloadHeaderBtn}
-            onPress={handleDownloadApk}
-            activeOpacity={0.85}
-          >
-            <Download size={13} color="#FFFFFF" />
-            <Text style={styles.downloadHeaderBtnText}>Descargar</Text>
-          </TouchableOpacity>
+          {/* Botón Descargar APK (En la barra superior al lado del perfil) - Solo visible en versión Web para descargar el APK móvil */}
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              style={styles.downloadHeaderBtn}
+              onPress={handleDownloadApk}
+              activeOpacity={0.85}
+            >
+              <Download size={13} color="#FFFFFF" />
+              <Text style={styles.downloadHeaderBtnText}>Descargar</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Avatar de Usuario */}
           <TouchableOpacity

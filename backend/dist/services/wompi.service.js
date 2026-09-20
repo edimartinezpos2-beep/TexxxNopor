@@ -7,19 +7,19 @@ exports.WompiService = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 class WompiService {
     static getBaseUrl() {
-        return process.env.WOMPI_API_URL || 'https://production.wompi.co/v1';
+        return process.env.WOMPI_API_URL || 'https://sandbox.wompi.co/v1';
     }
     static getPublicKey() {
-        return process.env.WOMPI_PUBLIC_KEY || 'pub_prod_zP1CNYatpa7IuMlT6cA7eYjArvsS5gHr';
+        return process.env.WOMPI_PUBLIC_KEY || 'pub_test_U4IAN0eTp2MASTARRGBaqySp2Nmyt1hr';
     }
     static getPrivateKey() {
-        return process.env.WOMPI_PRIVATE_KEY || 'prv_prod_FQyNyAoDdRxElNuulmnPpLMdJP0itSO4';
+        return process.env.WOMPI_PRIVATE_KEY || 'prv_test_69DZEARPuPgFGTtgFa9378R9n9AfcOhd';
     }
     static getIntegritySecret() {
-        return process.env.WOMPI_INTEGRITY_SECRET || 'prod_integrity_ozFYfU7XHFSNorTksdjwR41Hq3zs5RYp';
+        return process.env.WOMPI_INTEGRITY_SECRET || 'test_integrity_QSh6MH93ZNQS0VOBPY66FBQHoGCEqj4q';
     }
     static getEventsSecret() {
-        return process.env.WOMPI_EVENTS_SECRET || 'prod_events_QAwchgaNRbpDcgzupWoGueVCWNbNRfei';
+        return process.env.WOMPI_EVENTS_SECRET || 'test_events_v5dEIfKz198QevqE308kRYJBg5w2DhBd';
     }
     /**
      * Obtiene tokens de aceptación de Términos y Habeas Data requeridos por la ley colombiana
