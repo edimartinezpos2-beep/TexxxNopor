@@ -60,15 +60,15 @@ else if (fs_1.default.existsSync(LOCAL_WEB_PATH)) {
     app.use(express_1.default.static(LOCAL_WEB_PATH));
 }
 // Streaming de video de alto rendimiento con soporte de HTTP 206 (Partial Content / Ranges)
-// Si el archivo NO existe en disco (Render borra /uploads en restart) → redirige a CDN fallback
-const FALLBACK_VIDEO_CDN = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 const FALLBACK_IMAGE_CDN = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
 app.get('/api/stream/video/:filename', (req, res) => {
     const filePath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, req.params.filename);
     if (!fs_1.default.existsSync(filePath)) {
-        // Redirigir al CDN de respaldo para que el reproductor no falle
-        console.warn(`[Stream] Archivo no encontrado en disco: ${req.params.filename} → redirigiendo a CDN fallback`);
-        return res.redirect(302, FALLBACK_VIDEO_CDN);
+        console.warn(`[Stream] Archivo no encontrado en disco: ${req.params.filename}`);
+        return res.status(404).json({
+            error: 'Archivo de video no encontrado en el almacenamiento local.',
+            details: 'El archivo no existe en disco. Para almacenamiento permanente entre reinicios de Render, configura Bunny.net CDN.',
+        });
     }
     const stat = fs_1.default.statSync(filePath);
     const fileSize = stat.size;
@@ -119,8 +119,11 @@ app.use('/uploads/videos', (req, res, next) => {
     const filename = req.path.replace(/^\//, '');
     const filePath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, filename);
     if (filename && !fs_1.default.existsSync(filePath)) {
-        console.warn(`[Static] Video no encontrado en disco: ${filename} → fallback CDN`);
-        return res.redirect(302, FALLBACK_VIDEO_CDN);
+        console.warn(`[Static] Video no encontrado en disco: ${filename}`);
+        return res.status(404).json({
+            error: 'Video no encontrado en el servidor.',
+            details: 'El archivo se eliminó tras el reinicio del servidor efímero. Configura Bunny.net para almacenamiento permanente.',
+        });
     }
     next();
 }, express_1.default.static(exports.UPLOADS_VIDEOS_DIR));
@@ -508,27 +511,11 @@ function formatVideoItem(v, currentUserId, userFavorites) {
     const creatorDisplayAvatar = v.creator?.user?.avatarUrl ||
         v.actor?.avatarUrl ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop';
-    // Sanitizar URLs de /uploads que serán 404 en Render tras restart
-    // Si la URL apunta a /uploads/... en el servidor Render y el archivo no está en disco → CDN fallback
+    // Sanitizar URLs de video (preservar URL real sin sustituirla por videos de prueba externos)
     const sanitizeVideoUrl = (url) => {
         if (!url)
-            return 'https://vjs.zencdn.net/v/oceans.mp4';
-        // Si ya es una URL externa (no del servidor local/Render uploads), usar tal cual
-        const isRenderUpload = url.includes('texxxnopor-backend.onrender.com/uploads/') ||
-            url.includes('192.168.') ||
-            url.includes('localhost');
-        if (!isRenderUpload)
-            return url;
-        // Verificar si el archivo existe localmente (si el servidor tiene el archivo)
-        try {
-            const filename = url.split('/uploads/videos/').pop() || '';
-            const localPath = path_1.default.join(exports.UPLOADS_VIDEOS_DIR, filename);
-            if (filename && fs_1.default.existsSync(localPath))
-                return url;
-        }
-        catch (_) { }
-        // Archivo no existe en disco → fallback CDN
-        return 'https://vjs.zencdn.net/v/oceans.mp4';
+            return '';
+        return url;
     };
     const sanitizeThumbnailUrl = (url) => {
         if (!url)
@@ -2274,14 +2261,17 @@ app.get('/api/tags/popular', async (req, res) => {
             '#estreno': 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop',
         };
         const popularTags = Object.entries(tagCounts)
-            .map(([name, count], index) => ({
-            id: `pop-tag-${index + 1}`,
-            name,
-            count,
-            countFormatted: count === 1 ? '1 video' : `${count} videos`,
-            badge: count >= 4 ? 'HOT' : count >= 2 ? 'POPULAR' : undefined,
-            imageUrl: tagImages[name] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
-        }))
+            .map(([name, count], index) => {
+            const managed = Object.values(managedHashtagsStore).find((m) => m.name.toLowerCase() === name.toLowerCase());
+            return {
+                id: managed?.id || `pop-tag-${index + 1}`,
+                name: managed?.name || name,
+                count,
+                countFormatted: count === 1 ? '1 video' : `${count} videos`,
+                badge: count >= 4 ? 'HOT' : count >= 2 ? 'POPULAR' : undefined,
+                imageUrl: managed?.imageUrl || tagImages[name] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+            };
+        })
             .sort((a, b) => b.count - a.count);
         return res.json({
             status: 'success',
@@ -2293,6 +2283,255 @@ app.get('/api/tags/popular', async (req, res) => {
         console.error('Error fetching popular tags:', err);
         return res.status(500).json({ error: 'Error al consultar tags populares' });
     }
+});
+const managedHashtagsStore = {
+    'pop-tag-1': {
+        id: 'pop-tag-1',
+        name: '#parati',
+        imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-2': {
+        id: 'pop-tag-2',
+        name: '#hd',
+        imageUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-3': {
+        id: 'pop-tag-3',
+        name: '#amateur',
+        imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-4': {
+        id: 'pop-tag-4',
+        name: '#pareja',
+        imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-5': {
+        id: 'pop-tag-5',
+        name: '#nuevos',
+        imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-6': {
+        id: 'pop-tag-6',
+        name: '#4k',
+        imageUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-7': {
+        id: 'pop-tag-7',
+        name: '#masvideos',
+        imageUrl: 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop',
+    },
+    'pop-tag-8': {
+        id: 'pop-tag-8',
+        name: '#estreno',
+        imageUrl: 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop',
+    },
+};
+// GET /api/tags/list: Devuelve la lista completa de hashtags con imágenes
+app.get('/api/tags/list', async (req, res) => {
+    try {
+        const allVideos = await exports.prisma.video.findMany({
+            where: { status: 'READY' },
+            select: { tagsList: true },
+        }).catch(() => []);
+        const tagCounts = {};
+        allVideos.forEach((v) => {
+            if (Array.isArray(v.tagsList)) {
+                v.tagsList.forEach((t) => {
+                    if (t && typeof t === 'string') {
+                        const clean = t.trim().startsWith('#') ? t.trim().toLowerCase() : `#${t.trim().toLowerCase()}`;
+                        tagCounts[clean] = (tagCounts[clean] || 0) + 1;
+                    }
+                });
+            }
+        });
+        const items = Object.values(managedHashtagsStore).map((mTag) => {
+            const count = tagCounts[mTag.name.toLowerCase()] || 0;
+            return {
+                id: mTag.id,
+                name: mTag.name,
+                imageUrl: mTag.imageUrl,
+                count,
+                countFormatted: count === 1 ? '1 video' : `${count} videos`,
+                updatedByActorName: mTag.updatedByActorName,
+                updatedAt: mTag.updatedAt,
+            };
+        });
+        return res.json({ status: 'success', tags: items });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al obtener lista de hashtags' });
+    }
+});
+// PUT /api/tags/:id: Modificar nombre y foto del hashtag (SOLO ACTORES O ADMIN)
+app.put('/api/tags/:id', rbac_middleware_1.authenticateJWT, async (req, res) => {
+    try {
+        const userRole = (req.user?.role || '').toUpperCase();
+        if (userRole !== 'CREATOR' && userRole !== 'ADMIN') {
+            return res.status(403).json({
+                error: 'Permiso denegado. Solo los actores verificados pueden modificar el nombre y foto de los hashtags.',
+            });
+        }
+        const { id } = req.params;
+        const { name, imageUrl } = req.body;
+        let target = managedHashtagsStore[id];
+        if (!target) {
+            const found = Object.values(managedHashtagsStore).find((t) => t.name.toLowerCase() === (name || '').toLowerCase());
+            target = found || {
+                id: id || `tag-${Date.now()}`,
+                name: name || '#nuevo',
+                imageUrl: imageUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop',
+            };
+            managedHashtagsStore[target.id] = target;
+        }
+        if (name && typeof name === 'string' && name.trim()) {
+            const cleanName = name.trim().startsWith('#') ? name.trim().toLowerCase() : `#${name.trim().toLowerCase()}`;
+            target.name = cleanName;
+        }
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim()) {
+            target.imageUrl = imageUrl.trim();
+        }
+        target.updatedByActorId = req.user?.id;
+        target.updatedByActorName = req.user?.username || req.user?.email?.split('@')[0] || 'Actor';
+        target.updatedAt = new Date().toISOString();
+        return res.json({
+            status: 'success',
+            message: 'Hashtag actualizado correctamente por el actor',
+            tag: target,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al actualizar el hashtag' });
+    }
+});
+let adsStore = [
+    {
+        id: 'ad-default-1',
+        title: 'Membresía VIP Exclusiva TexxxNopor',
+        mediaUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&auto=format&fit=crop',
+        targetUrl: 'https://texxxnopor.com/vip',
+        placement: 'IN_VIDEO_PLAYER',
+        durationSeconds: 5,
+        skipAfterSeconds: 3,
+        impressions: 120,
+        clicks: 14,
+        isActive: false, // Desactivado por defecto
+        createdAt: new Date().toISOString(),
+    },
+];
+// GET /api/ads: Consultar anuncios activos (con filtro opcional por recuadro)
+app.get('/api/ads', async (req, res) => {
+    try {
+        const { placement } = req.query;
+        let activeAds = adsStore.filter((a) => a.isActive);
+        if (placement && typeof placement === 'string') {
+            activeAds = activeAds.filter((a) => a.placement === placement.toUpperCase());
+        }
+        return res.json({ status: 'success', ads: activeAds });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al consultar anuncios' });
+    }
+});
+// GET /api/admin/ads: Listar todos los anuncios (Panel de Administración)
+app.get('/api/admin/ads', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        return res.json({ status: 'success', ads: adsStore });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al consultar anuncios de administración' });
+    }
+});
+// POST /api/admin/ads: Crear nuevo anuncio configurado por el Administrador
+app.post('/api/admin/ads', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const { title, mediaUrl, targetUrl, placement, durationSeconds, skipAfterSeconds, isActive } = req.body;
+        if (!title || !mediaUrl) {
+            return res.status(400).json({ error: 'El título y la URL del medio publicitario son requeridos' });
+        }
+        const validPlacement = ['HOME_FEED', 'BETWEEN_VIDEOS', 'IN_VIDEO_PLAYER'].includes(placement)
+            ? placement
+            : 'IN_VIDEO_PLAYER';
+        const newAd = {
+            id: `ad-${Date.now()}`,
+            title: String(title).trim(),
+            mediaUrl: String(mediaUrl).trim(),
+            targetUrl: (targetUrl || 'https://texxxnopor.com').trim(),
+            placement: validPlacement,
+            durationSeconds: Math.max(1, Number(durationSeconds) || 5),
+            skipAfterSeconds: Number(skipAfterSeconds) || 0,
+            impressions: 0,
+            clicks: 0,
+            isActive: isActive !== undefined ? Boolean(isActive) : true,
+            createdAt: new Date().toISOString(),
+        };
+        adsStore.unshift(newAd);
+        return res.status(201).json({
+            status: 'success',
+            message: 'Anuncio configurado y posicionado exitosamente',
+            ad: newAd,
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al crear el anuncio' });
+    }
+});
+// PUT /api/admin/ads/:id: Actualizar anuncio existente
+app.put('/api/admin/ads/:id', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const adIndex = adsStore.findIndex((a) => a.id === id);
+        if (adIndex === -1) {
+            return res.status(404).json({ error: 'Anuncio no encontrado' });
+        }
+        const { title, mediaUrl, targetUrl, placement, durationSeconds, skipAfterSeconds, isActive } = req.body;
+        if (title !== undefined)
+            adsStore[adIndex].title = String(title).trim();
+        if (mediaUrl !== undefined)
+            adsStore[adIndex].mediaUrl = String(mediaUrl).trim();
+        if (targetUrl !== undefined)
+            adsStore[adIndex].targetUrl = String(targetUrl).trim();
+        if (placement !== undefined)
+            adsStore[adIndex].placement = placement;
+        if (durationSeconds !== undefined)
+            adsStore[adIndex].durationSeconds = Math.max(1, Number(durationSeconds) || 5);
+        if (skipAfterSeconds !== undefined)
+            adsStore[adIndex].skipAfterSeconds = Number(skipAfterSeconds);
+        if (isActive !== undefined)
+            adsStore[adIndex].isActive = Boolean(isActive);
+        return res.json({
+            status: 'success',
+            message: 'Anuncio actualizado correctamente',
+            ad: adsStore[adIndex],
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al actualizar el anuncio' });
+    }
+});
+// DELETE /api/admin/ads/:id: Eliminar anuncio
+app.delete('/api/admin/ads/:id', rbac_middleware_1.authenticateJWT, (0, rbac_middleware_1.requireRole)(rbac_1.UserRole.ADMIN), async (req, res) => {
+    try {
+        const { id } = req.params;
+        adsStore = adsStore.filter((a) => a.id !== id);
+        return res.json({ status: 'success', message: 'Anuncio eliminado exitosamente' });
+    }
+    catch (err) {
+        return res.status(500).json({ error: 'Error al eliminar el anuncio' });
+    }
+});
+// POST /api/ads/:id/impression: Registrar visualización
+app.post('/api/ads/:id/impression', async (req, res) => {
+    const ad = adsStore.find((a) => a.id === req.params.id);
+    if (ad)
+        ad.impressions += 1;
+    return res.json({ status: 'success' });
+});
+// POST /api/ads/:id/click: Registrar clic
+app.post('/api/ads/:id/click', async (req, res) => {
+    const ad = adsStore.find((a) => a.id === req.params.id);
+    if (ad)
+        ad.clicks += 1;
+    return res.json({ status: 'success' });
 });
 // 3. Consultar Estado de Transacción Wompi
 app.get('/api/wompi/status/:transactionId', rbac_middleware_1.authenticateJWT, async (req, res) => {

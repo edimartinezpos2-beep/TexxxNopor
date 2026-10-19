@@ -15,17 +15,34 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.texxxnopor.mobile",
-      "buildNumber": "1.4.1"
+      "buildNumber": "1.4.1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TexxxNopor necesita acceso a tu cámara para emitir transmisiones en vivo a tus seguidores.",
+        "NSMicrophoneUsageDescription": "TexxxNopor necesita acceso a tu micrófono para transmitir en vivo con audio."
+      }
     },
     "android": {
       "package": "com.texxxnopor.mobile",
       "versionCode": 10,
       "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       }
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TexxxNopor necesita acceso a tu cámara para emitir transmisiones en vivo a tus seguidores.",
+          "microphonePermission": "TexxxNopor necesita acceso a tu micrófono para transmitir en vivo con audio."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },

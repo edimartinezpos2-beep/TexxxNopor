@@ -105,7 +105,7 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
     }
     if (!primary) primary = hls || url || '';
     if (!primary || primary.trim() === '') {
-      return 'https://vjs.zencdn.net/v/oceans.mp4';
+      return '';
     }
 
     // ► Si es una URL relativa del backend (/uploads/... o /api/stream/...) → anteponer API_BASE_URL
@@ -219,7 +219,6 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
 
         const primary = resolveSafeVideoUri(videoUrl);
         const secondary = resolveSafeVideoUri(hlsMasterUrl);
-        const fallbackCdn = 'https://vjs.zencdn.net/v/oceans.mp4';
 
         if (primary && secondary && primary !== secondary) {
           if (currentSource === secondary && currentSource !== primary) {
@@ -229,10 +228,6 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
             setCurrentSource(secondary);
             return;
           }
-        }
-        if (currentSource !== fallbackCdn) {
-          setCurrentSource(fallbackCdn);
-          return;
         }
         setHasError(true);
       }
@@ -580,6 +575,29 @@ export const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({
               </View>
             </Animated.View>
           )}
+
+          {/* Mensaje de Error Limpio TexxxNopor cuando el video no existe */}
+          {hasError && (
+            <View style={styles.errorOverlayContainer}>
+              <AlertCircle size={40} color="#E50914" style={{ marginBottom: 10 }} />
+              <Text style={styles.errorTitleText}>Video No Disponible</Text>
+              <Text style={styles.errorSubtitleText}>
+                El archivo no fue encontrado en el servidor. Si hubo un reinicio o actualización en Render, los videos locales temporales se eliminan. Configura Bunny.net en Render para almacenamiento permanente.
+              </Text>
+              <TouchableOpacity
+                style={styles.errorRetryBtn}
+                onPress={() => {
+                  setHasError(false);
+                  const retrySrc = resolveSafeVideoUri(videoUrl, hlsMasterUrl);
+                  setCurrentSource(retrySrc);
+                  videoRef.current?.loadAsync({ uri: retrySrc }, {}, false);
+                }}
+              >
+                <RotateCcw size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.errorRetryBtnText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </TouchableWithoutFeedback>
 
@@ -640,6 +658,42 @@ const styles = StyleSheet.create({
   video: {
     width: '100%',
     height: '100%',
+  },
+  errorOverlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 10, 14, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    zIndex: 100,
+  },
+  errorTitleText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  errorSubtitleText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 16,
+    maxWidth: 380,
+  },
+  errorRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E50914',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  errorRetryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   modeFeedbackBadge: {
     position: 'absolute',

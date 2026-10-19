@@ -20,6 +20,7 @@
     "expo-asset": "~10.0.10",
     "expo-auth-session": "~5.5.2",
     "expo-av": "~14.0.6",
+    "expo-camera": "~15.0.16",
     "expo-crypto": "~13.0.2",
     "expo-document-picker": "~12.0.2",
     "expo-image-picker": "~15.1.0",

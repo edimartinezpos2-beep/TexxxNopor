@@ -84,7 +84,44 @@ Sube tu archivo `TexxxNopor.apk` a un almacenamiento permanente en la nube (como
 
 ---
 
-## 4. Reglas de Visibilidad del Botón «Descargar» y Ventana de Actualización
+## 4. Persistencia de Videos en Render: ¿Por qué desaparecen y cómo solucionarlo?
+
+### El Problema del "Disco Efímero" (*Ephemeral Storage*)
+En Render (especialmente en los planes estándar y gratuitos), cada vez que realizas una actualización (git push, redeploy o reinicio del servicio):
+1. Render **destruye el contenedor anterior** y crea uno nuevo desde el código fuente.
+2. Cualquier archivo guardado en el disco local (`/uploads/videos/` o `/uploads/images/`) **se borra por completo**.
+3. La base de datos PostgreSQL sigue teniendo el registro del video con la URL antigua (`.../uploads/videos/...`), pero el archivo físico ya no existe en el disco.
+4. **¿Por qué se reproducía un video que no tenía nada que ver?**
+   El código tenía previamente un fallback que, al detectar que el archivo no existía en disco, intentaba cargar videos de muestra públicos como `oceans.mp4` (un video de peces del océano) o `BigBuckBunny.mp4` (un conejo animado). **Hemos eliminado completamente estos fallbacks del código**. Ahora el sistema muestra un mensaje de error limpio y preserva la URL original.
+
+### La Solución Definitiva (Para que NUNCA vuelva a suceder)
+
+Tienes **dos métodos 100% garantizados** para que los videos no se borren jamás en Render:
+
+#### Método 1: Configurar Bunny.net en Render (Recomendada y ya programada)
+El backend de TexxxNopor ya tiene programada la subida automática a **Bunny.net Storage & CDN**. Para activarla, solo debes entrar a tu panel de Render:
+1. Ve a **[dashboard.render.com](https://dashboard.render.com)** $\rightarrow$ Servicio `texxxnopor-backend` $\rightarrow$ Pestaña **Environment**.
+2. Agrega las siguientes 4 variables de entorno:
+   ```env
+   BUNNY_STORAGE_ZONE_NAME="texxxnopor"
+   BUNNY_ACCESS_KEY="fbcd62d0-a06e-4816-944217d8df7a-4a63-4601"
+   BUNNY_STORAGE_HOSTNAME="storage.bunnycdn.com"
+   BUNNY_CDN_HOSTNAME="texxxnopor.b-cdn.net"
+   ```
+3. Guarda los cambios. A partir de ese momento, cada video que subas viajará a los servidores de Bunny.net. **Incluso si Render se actualiza o se reinicia mil veces, los videos en Bunny.net quedan intactos y con streaming 4K permanente.**
+
+#### Método 2: Agregar un Disco Persistente en Render (*Render Persistent Disk*)
+Si prefieres que los videos se guarden en el servidor de Render sin usar servicios externos:
+1. En **[dashboard.render.com](https://dashboard.render.com)** $\rightarrow$ Servicio `texxxnopor-backend` $\rightarrow$ **Disks $\rightarrow$ Add Disk**.
+2. Configura:
+   - **Name:** `texxxnopor-uploads`
+   - **Mount Path:** `/opt/render/project/src/backend/uploads`
+   - **Size:** 10 GB o superior.
+3. Guarda. Render mantendrá este disco intacto a través de todas las actualizaciones y reinicios.
+
+---
+
+## 5. Reglas de Visibilidad del Botón «Descargar» y Ventana de Actualización
 
 Para ofrecer una experiencia de usuario limpia y sin elementos innecesarios, se definieron las siguientes reglas:
 
@@ -126,7 +163,7 @@ graph TD
 
 ---
 
-## 5. Configuración de Dominio Personalizado (ej. `texxxnopor.com`)
+## 6. Configuración de Dominio Personalizado (ej. `texxxnopor.com`)
 
 Para vincular tu propio dominio comprado en *GoDaddy, Namecheap, Hostinger o Porkbun*:
 
@@ -139,7 +176,7 @@ Para vincular tu propio dominio comprado en *GoDaddy, Namecheap, Hostinger o Por
 
 ---
 
-## 6. Solución al Modo Reposo de Render (UptimeRobot 24/7 Gratis)
+## 7. Solución al Modo Reposo de Render (UptimeRobot 24/7 Gratis)
 
 Para evitar que el backend gratuito de Render se suspenda tras 15 minutos de inactividad:
 

@@ -14,7 +14,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import {
   X,
   RotateCcw,
@@ -39,6 +39,8 @@ import {
   Play,
   Heart,
   ChevronRight,
+  Camera,
+  CameraOff,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -60,7 +62,6 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   // Estados de Configuración Pre-Live (Imagen 4)
   const [streamTitle, setStreamTitle] = useState('Noche especial charlando con fans 🔥');
   const [selectedCategory, setSelectedCategory] = useState('Cámara del dispositivo');
-  const [showRewardBanner, setShowRewardBanner] = useState(true);
   const [goalText, setGoalText] = useState('Meta: 100 Rosas 🌹');
   const [goalTarget, setGoalTarget] = useState(100);
   const [goalCurrent, setGoalCurrent] = useState(0);
@@ -123,10 +124,19 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
     platformFeeCoins?: number;
   } | null>(null);
 
-  // Estados de Cámara del Dispositivo (Frontal / Trasera)
+  // Estados y Permisos de Cámara del Dispositivo (Delantera / Trasera)
+  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const webVideoRef = useRef<any>(null);
   const mediaStreamRef = useRef<any>(null);
+
+  // Auto solicitar permiso de cámara en dispositivos móviles al abrir la pantalla
+  useEffect(() => {
+    if (Platform.OS !== 'web' && (!permission || !permission.granted)) {
+      requestPermission().catch(() => {});
+    }
+  }, [permission?.granted]);
 
   const setupCamera = async (front: boolean) => {
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
@@ -149,14 +159,16 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         }
         setCameraActive(true);
       } catch (e: any) {
-        console.log('[Camera] Vista con preview HD simulado:', e.message);
+        console.log('[Camera Web] Error iniciando getUserMedia:', e.message);
         setCameraActive(false);
       }
     }
   };
 
   useEffect(() => {
-    setupCamera(isFrontCamera);
+    if (Platform.OS === 'web') {
+      setupCamera(isFrontCamera);
+    }
     return () => {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t: any) => t.stop());
@@ -282,12 +294,104 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
     ]);
   };
 
-  // Alternar Giro de Cámara (Cámara frontal / trasera)
+  // Alternar Giro de Cámara (Cámara delantera / trasera)
   const handleFlipCamera = () => {
     const nextFront = !isFrontCamera;
     setIsFrontCamera(nextFront);
     setIsMirrored(nextFront);
-    setupCamera(nextFront);
+    setCameraError(null);
+    if (Platform.OS === 'web') {
+      setupCamera(nextFront);
+    }
+  };
+
+  // Renderizado de la cámara real (delantera o trasera del celular)
+  const renderCameraFeed = () => {
+    // 1. En entorno Web: usar elemento <video> nativo con stream getUserMedia
+    if (Platform.OS === 'web') {
+      if (cameraActive) {
+        return (
+          <video
+            ref={webVideoRef as any}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: isMirrored ? 'scaleX(-1)' : 'none',
+              zIndex: 0,
+            } as any}
+          />
+        );
+      }
+      return (
+        <View style={styles.cameraPermissionBox}>
+          <Camera size={48} color="#FF2D55" style={{ marginBottom: 12 }} />
+          <Text style={styles.cameraPermissionTitle}>Cámara Web</Text>
+          <Text style={styles.cameraPermissionSubtitle}>
+            Activa el acceso a tu cámara para poder verte antes de iniciar la transmisión.
+          </Text>
+          <TouchableOpacity
+            style={styles.cameraEnableBtn}
+            onPress={() => setupCamera(isFrontCamera)}
+            activeOpacity={0.85}
+          >
+            <Camera size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Text style={styles.cameraEnableBtnText}>Activar Cámara</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // 2. En dispositivos móviles (Android / iOS):
+    if (!permission || !permission.granted) {
+      return (
+        <View style={styles.cameraPermissionBox}>
+          <CameraOff size={52} color="#FF3B30" style={{ marginBottom: 14 }} />
+          <Text style={styles.cameraPermissionTitle}>Cámara Inactiva</Text>
+          <Text style={styles.cameraPermissionSubtitle}>
+            TexxxNopor necesita acceso a tu cámara para que puedas verte y transmitir en vivo a tus seguidores.
+          </Text>
+          <TouchableOpacity
+            style={styles.cameraEnableBtn}
+            onPress={async () => {
+              const res = await requestPermission();
+              if (!res.granted) {
+                Alert.alert(
+                  'Permiso Requerido',
+                  'Por favor permite el acceso a la cámara en los ajustes de tu celular para poder emitir en vivo.'
+                );
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Camera size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Text style={styles.cameraEnableBtnText}>Activar Cámara del Celular</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Cámara nativa activa con CameraView (delantera o trasera)
+    return (
+      <CameraView
+        key={`live-cam-${isFrontCamera ? 'front' : 'back'}`}
+        style={StyleSheet.absoluteFillObject}
+        facing={isFrontCamera ? 'front' : 'back'}
+        mirror={isFrontCamera}
+        mode="video"
+        mute={isMuted}
+        onMountError={(e) => {
+          console.warn('[CameraView] Error montando cámara:', e.message);
+          setCameraError(e.message || 'Error al iniciar la cámara');
+        }}
+      />
+    );
   };
 
   // Agregar palabra bloqueada
@@ -312,38 +416,9 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   if (isBroadcasting) {
     return (
       <View style={styles.container}>
-        {/* Fondo de Transmisión en Vivo: Cámara real o preview HD */}
-        {Platform.OS === 'web' && cameraActive ? (
-          <video
-            ref={webVideoRef as any}
-            autoPlay
-            playsInline
-            muted
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transform: isMirrored ? 'scaleX(-1)' : 'none',
-              zIndex: 1,
-            } as any}
-          />
-        ) : (
-          <Video
-            source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
-            style={[
-              styles.cameraPreviewVideo,
-              isMirrored && { transform: [{ scaleX: -1 }] },
-            ]}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay
-            isLooping
-            isMuted
-          />
-        )}
-        <View style={[styles.filterOverlay, getFilterStyle()]} />
+        {/* Fondo de Transmisión en Vivo: Cámara real activa del celular (Delantera o Trasera) */}
+        {renderCameraFeed()}
+        <View style={[styles.filterOverlay, getFilterStyle()]} pointerEvents="none" />
 
         {/* Cabecera del Estudio de Transmisión */}
         <View style={styles.studioHeader}>
@@ -426,7 +501,7 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
           >
             <RotateCcw size={20} color="#FFFFFF" />
             <Text style={styles.studioToolLabel}>
-              {isFrontCamera ? 'Frontal' : 'Trasera'}
+              {isFrontCamera ? 'Delantera' : 'Trasera'}
             </Text>
           </TouchableOpacity>
 
@@ -477,38 +552,9 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
   // =========================================================================
   return (
     <View style={styles.container}>
-      {/* Vista Previa de Cámara en Vivo con Fallback HD */}
-      {Platform.OS === 'web' && cameraActive ? (
-        <video
-          ref={webVideoRef as any}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            transform: isMirrored ? 'scaleX(-1)' : 'none',
-            zIndex: 1,
-          } as any}
-        />
-      ) : (
-        <Video
-          source={{ uri: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }}
-          style={[
-            styles.cameraPreviewVideo,
-            isMirrored && { transform: [{ scaleX: -1 }] },
-          ]}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay
-          isLooping
-          isMuted
-        />
-      )}
-      <View style={[styles.filterOverlay, getFilterStyle()]} />
+      {/* Vista Previa de Cámara Real Activa del Celular (Delantera o Trasera) */}
+      {renderCameraFeed()}
+      <View style={[styles.filterOverlay, getFilterStyle()]} pointerEvents="none" />
 
       {/* 1. Barra Superior con Botón Cerrar "X", Recompensas y Ajustes */}
       <View style={styles.preLiveTopBar}>
@@ -522,7 +568,7 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
           <Text style={styles.topRewardsText}>92% Actor / 8% Plataforma</Text>
         </TouchableOpacity>
 
-        {/* Píldora de Selección de Cámara (Frontal / Trasera) */}
+        {/* Píldora de Selección de Cámara (Delantera / Trasera) */}
         <TouchableOpacity
           style={styles.cameraSwitchPill}
           onPress={handleFlipCamera}
@@ -530,7 +576,7 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         >
           <RotateCcw size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
           <Text style={styles.cameraSwitchPillText}>
-            {isFrontCamera ? 'Frontal' : 'Trasera'}
+            {isFrontCamera ? 'Delantera' : 'Trasera'}
           </Text>
         </TouchableOpacity>
 
@@ -550,17 +596,6 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
         </View>
       </View>
 
-      {/* Banner de Misiones Semanales (Descartable) */}
-      {showRewardBanner && (
-        <View style={styles.weeklyMissionBanner}>
-          <Text style={styles.weeklyMissionText}>
-            Recompensas LIVE escalonadas: completa misiones semanales para obtener recompensas.
-          </Text>
-          <TouchableOpacity onPress={() => setShowRewardBanner(false)}>
-            <X size={14} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* 2. Cuadrícula 3x3 de Herramientas de Configuración (Imagen 4 Exacta) */}
       {/* Girar | Mejorar | Efectos | Ajustes | Servicio+ */}
@@ -578,7 +613,7 @@ export const TikTokLiveBroadcasterScreen: React.FC<TikTokLiveBroadcasterScreenPr
               <RotateCcw size={24} color="#FFFFFF" />
             </View>
             <Text style={styles.toolGridLabel}>
-              {isFrontCamera ? 'Cam. Frontal' : 'Cam. Trasera'}
+              {isFrontCamera ? 'Cam. Delantera' : 'Cam. Trasera'}
             </Text>
           </TouchableOpacity>
 
@@ -1066,6 +1101,47 @@ const styles = StyleSheet.create({
   },
   filterOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+  cameraPermissionBox: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#09090D',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    zIndex: 2,
+  },
+  cameraPermissionTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  cameraPermissionSubtitle: {
+    color: '#A0A0B0',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  cameraEnableBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2D55',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    shadowColor: '#FF2D55',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  cameraEnableBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 
   // ---------------------------------------------------------

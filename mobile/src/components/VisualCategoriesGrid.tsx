@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { Hash, Layers, Flame } from 'lucide-react-native';
+import { Hash, Layers, Flame, ChevronRight, Edit3 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { HashtagListModal } from './HashtagListModal';
 
 interface VisualCategory {
   id: string;
@@ -27,6 +29,10 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
   onSelectCategory,
 }) => {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const isActor = Boolean(user?.role === 'CREATOR' || user?.role === 'ADMIN');
+  const [showHashtagModal, setShowHashtagModal] = useState(false);
+
   const [categories, setCategories] = useState<VisualCategory[]>([
     {
       id: 'cat-1',
@@ -63,10 +69,9 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
     },
   ]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadTags = () => {
     api.tags.getPopular().then((tags) => {
-      if (isMounted && Array.isArray(tags) && tags.length > 0) {
+      if (Array.isArray(tags) && tags.length > 0) {
         setCategories(
           tags.map((t) => ({
             id: t.id,
@@ -78,9 +83,10 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
         );
       }
     });
-    return () => {
-      isMounted = false;
-    };
+  };
+
+  useEffect(() => {
+    loadTags();
   }, []);
 
   return (
@@ -88,19 +94,42 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
       {/* Cabecera */}
       <View style={styles.sectionHeader}>
         <View style={styles.titleWithIcon}>
-          <View style={[styles.iconBox, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
-            <Hash size={16} color="#FF9500" />
+          <View style={[styles.iconBox, { backgroundColor: 'rgba(255, 45, 85, 0.15)' }]}>
+            <Hash size={16} color="#FF2D55" />
           </View>
           <View>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Categorías Populares #Hashtags
+              Hashtags y Tendencias
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Valores y catálogo real por etiqueta
+              {isActor ? 'Actores pueden modificar nombre y foto' : 'Explora videos por etiquetas oficiales'}
             </Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.manageBtn}
+          onPress={() => setShowHashtagModal(true)}
+          activeOpacity={0.8}
+        >
+          {isActor ? (
+            <Edit3 size={13} color="#FFD700" style={{ marginRight: 4 }} />
+          ) : null}
+          <Text style={[styles.manageBtnText, isActor && { color: '#FFD700' }]}>
+            {isActor ? 'Gestionar' : 'Ver lista'}
+          </Text>
+          <ChevronRight size={14} color={isActor ? '#FFD700' : '#FF2D55'} />
+        </TouchableOpacity>
       </View>
+
+      <HashtagListModal
+        visible={showHashtagModal}
+        onClose={() => {
+          setShowHashtagModal(false);
+          loadTags();
+        }}
+        onSelectHashtag={onSelectCategory}
+      />
 
       {/* Carrusel Horizontal de Tarjetas Visuales */}
       <ScrollView
@@ -157,6 +186,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     marginBottom: 12,
+  },
+  manageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E28',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2A2A38',
+  },
+  manageBtnText: {
+    color: '#FF2D55',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginRight: 2,
   },
   titleWithIcon: {
     flexDirection: 'row',

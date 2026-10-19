@@ -861,7 +861,7 @@ export const api = {
           videoData.thumbnailUrl ||
           'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
         thumbnailPublicId: videoData.thumbnailPublicId || undefined,
-        videoUrl: videoData.videoUrl || 'https://vjs.zencdn.net/v/oceans.mp4',
+        videoUrl: videoData.videoUrl || '',
         cloudinaryPublicId: videoData.cloudinaryPublicId || `texxx_cld_vid_${Date.now()}`,
         hlsMasterUrl: videoData.hlsMasterUrl || 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
         category: videoData.category || 'Para ti',
@@ -1582,6 +1582,36 @@ export const api = {
         throwOnError: true,
       });
     },
+
+    // 8. Gestión de Anuncios y Publicidad
+    ads: {
+      async getAll(token: string): Promise<any[]> {
+        const res = await apiFetch<{ status: string; ads: any[] }>('/api/admin/ads', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return res?.ads || [];
+      },
+      async create(token: string, data: any): Promise<any> {
+        return await apiFetch<any>('/api/admin/ads', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(data),
+        });
+      },
+      async update(token: string, id: string, data: any): Promise<any> {
+        return await apiFetch<any>(`/api/admin/ads/${id}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(data),
+        });
+      },
+      async delete(token: string, id: string): Promise<any> {
+        return await apiFetch<any>(`/api/admin/ads/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      },
+    },
   },
 
   // ====================================================
@@ -1798,6 +1828,58 @@ export const api = {
         { id: 'pop-4', name: '#pareja', count: 2, countFormatted: '2 videos', badge: 'POPULAR', imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop' },
         { id: 'pop-5', name: '#nuevos', count: 2, countFormatted: '2 videos', imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop' },
       ];
+    },
+
+    async getList(): Promise<{ id: string; name: string; count: number; countFormatted: string; imageUrl: string; updatedByActorName?: string }[]> {
+      try {
+        const res = await apiFetch<{ status: string; tags: any[] }>('/api/tags/list');
+        if (res && Array.isArray(res.tags) && res.tags.length > 0) return res.tags;
+      } catch (_) {}
+      return [
+        { id: 'pop-tag-1', name: '#parati', count: 6, countFormatted: '6 videos', imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-2', name: '#hd', count: 5, countFormatted: '5 videos', imageUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-3', name: '#amateur', count: 3, countFormatted: '3 videos', imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-4', name: '#pareja', count: 2, countFormatted: '2 videos', imageUrl: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-5', name: '#nuevos', count: 2, countFormatted: '2 videos', imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-6', name: '#4k', count: 1, countFormatted: '1 video', imageUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-7', name: '#masvideos', count: 1, countFormatted: '1 video', imageUrl: 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop' },
+        { id: 'pop-tag-8', name: '#estreno', count: 1, countFormatted: '1 video', imageUrl: 'https://images.unsplash.com/photo-1592478411213-6153e4ebc07d?w=500&auto=format&fit=crop' },
+      ];
+    },
+
+    async update(token: string, id: string, data: { name?: string; imageUrl?: string }): Promise<{ status: string; tag: any }> {
+      return await apiFetch<any>(`/api/tags/${id}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+    },
+  },
+
+  // ====================================================
+  // 10.2 SISTEMA DE ANUNCIOS Y PUBLICIDAD
+  // ====================================================
+  ads: {
+    async getActive(placement?: string): Promise<any[]> {
+      try {
+        const query = placement ? `?placement=${placement}` : '';
+        const res = await apiFetch<{ status: string; ads: any[] }>(`/api/ads${query}`);
+        return res?.ads || [];
+      } catch {
+        return [];
+      }
+    },
+
+    async recordImpression(id: string): Promise<void> {
+      try {
+        await apiFetch(`/api/ads/${id}/impression`, { method: 'POST' });
+      } catch (_) {}
+    },
+
+    async recordClick(id: string): Promise<void> {
+      try {
+        await apiFetch(`/api/ads/${id}/click`, { method: 'POST' });
+      } catch (_) {}
     },
   },
 

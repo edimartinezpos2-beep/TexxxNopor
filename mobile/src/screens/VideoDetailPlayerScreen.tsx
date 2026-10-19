@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { HLSVideoPlayer } from '../components/HLSVideoPlayer';
+import { InVideoAdOverlay } from '../components/InVideoAdOverlay';
 import { useTheme } from '../context/ThemeContext';
 import { api, VideoItem, CommentItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -301,17 +302,20 @@ export const VideoDetailPlayerScreen: React.FC<VideoDetailPlayerScreenProps> = (
         </View>
       </View>
 
-      {/* 2. Reproductor HLS / Cloudinary */}
-      <HLSVideoPlayer
-        hlsMasterUrl={currentVideo.hlsMasterUrl || ''}
-        videoUrl={currentVideo.videoUrl}
-        posterUrl={currentVideo.thumbnailUrl}
-        title={currentVideo.title}
-        onBack={onBack}
-        autoPlay={true}
-        rate={playbackRate}
-        onRateChange={setPlaybackRate}
-      />
+      {/* 2. Reproductor HLS / Cloudinary con Overlay de Anuncio si está activo */}
+      <View style={{ position: 'relative' }}>
+        <HLSVideoPlayer
+          hlsMasterUrl={currentVideo.hlsMasterUrl || ''}
+          videoUrl={currentVideo.videoUrl}
+          posterUrl={currentVideo.thumbnailUrl}
+          title={currentVideo.title}
+          onBack={onBack}
+          autoPlay={true}
+          rate={playbackRate}
+          onRateChange={setPlaybackRate}
+        />
+        <InVideoAdOverlay />
+      </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Título y Categoría */}

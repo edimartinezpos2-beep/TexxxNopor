@@ -53,7 +53,6 @@ import { TopPornstarsSection } from '../components/TopPornstarsSection';
 import { TrendingRankingsSection } from '../components/TrendingRankingsSection';
 import { VisualCategoriesGrid } from '../components/VisualCategoriesGrid';
 import { LiveCamsTeaser } from '../components/LiveCamsTeaser';
-import { AdBannerCard } from '../components/AdBannerCard';
 import { GamesTeaserBanner } from '../components/GamesTeaserBanner';
 
 interface HomeScreenProps {
@@ -100,20 +99,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     { id: '4', name: 'Amateur', icon: User },
     { id: '5', name: 'Pareja', icon: Users },
   ];
-
-  // Hashtags persistidos cargados del servidor
-  const [dynamicTags, setDynamicTags] = useState<string[]>([]);
-
-  useEffect(() => {
-    api.tags.getAll().then((tags) => {
-      if (Array.isArray(tags)) {
-        const filtered = tags
-          .filter((t) => !['#parati', '#nuevos', '#masvideos', '#amateur', '#pareja'].includes(t.toLowerCase()))
-          .slice(0, 10);
-        setDynamicTags(filtered);
-      }
-    }).catch(() => {});
-  }, []);
 
   const handleDownloadApk = () => {
     const downloadUrl = api.system ? api.system.getDownloadUrl() : 'https://texxxnopor-backend.onrender.com/api/app/download-apk';
@@ -309,16 +294,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
     return (
       <View key={item.id}>
-        {/* Cada 6 videos, insertamos un banner publicitario nativo de TrafficJunky */}
-        {index > 0 && index % 6 === 0 && (
-          <AdBannerCard
-            title="Citas para Adultos Verificadas en tu Ciudad"
-            subtitle="Conoce solteras y solteros dispuestos a todo esta noche. Registro 100% privado."
-            ctaText="Ver Fotos Gratis"
-            imageUrl="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop"
-            sponsorName="TrafficJunky Ads"
-          />
-        )}
 
         <TouchableOpacity
           style={[
@@ -689,16 +664,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 />
               )}
 
-              {/* 6. Banner Publicitario Nativo (TrafficJunky / Adult Ads Slot) */}
-              {!searchQuery && (
-                <AdBannerCard
-                  title="Juegos Para Adultos #1 Sin Tarjeta de Crédito"
-                  subtitle="Más de 50,000 jugadores en línea ahora mismo. Únete gratis en 10 segundos."
-                  ctaText="Jugar Gratis"
-                  imageUrl="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&auto=format&fit=crop"
-                  sponsorName="TrafficJunky Ads"
-                />
-              )}
 
               {/* 7. Explorar por Categorías Populares con Miniaturas Fotográficas */}
               {!searchQuery && (
@@ -774,38 +739,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           ]}
                         >
                           {cat.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-
-                  {/* Hashtags dinámicos y creados por actores */}
-                  {dynamicTags.map((tag) => {
-                    const isSelected = selectedCategory === tag;
-                    return (
-                      <TouchableOpacity
-                        key={tag}
-                        style={[
-                          styles.categoryChip,
-                          { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-                          isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                        ]}
-                        onPress={() => setSelectedCategory(tag)}
-                        activeOpacity={0.8}
-                      >
-                        <Hash
-                          size={12}
-                          color={isSelected ? '#FFFFFF' : colors.primary}
-                          style={{ marginRight: 3 }}
-                        />
-                        <Text
-                          style={[
-                            styles.categoryChipText,
-                            { color: colors.textPrimary },
-                            isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
-                          ]}
-                        >
-                          {tag.replace(/^#/, '')}
                         </Text>
                       </TouchableOpacity>
                     );
