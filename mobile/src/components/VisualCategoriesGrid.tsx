@@ -133,7 +133,7 @@ export const VisualCategoriesGrid: React.FC<VisualCategoriesGridProps> = ({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText>Cargando categorías...</Text>
+        <Text style={styles.loadingText}>Cargando categorías...</Text>
       </View>
     );
   }
