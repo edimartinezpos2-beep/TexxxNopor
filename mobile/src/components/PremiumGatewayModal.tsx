@@ -275,7 +275,7 @@ export const PremiumGatewayModal: React.FC<PremiumGatewayModalProps> = ({
       if (subStatus && subStatus.isVip) {
         // La base de datos confirmó el pago verificado por Wompi
         if (updateUser) {
-          updateUser({ isVerified: true });
+          updateUser({ isVerified: true, isVip: true });
         }
 
         const confirmedTxId = subStatus.lastPaymentRef || `TX-WMP-${Date.now().toString().slice(-8)}`;

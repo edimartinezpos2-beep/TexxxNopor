@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { Home, Compass, Users, Heart, User, Gamepad2 } from 'lucide-react-native';
@@ -28,6 +28,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
   const navigation = useNavigation<any>();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
+  const isDesktopWeb = Platform.OS === 'web' && width >= 900;
 
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
   const [activeLiveStream, setActiveLiveStream] = useState<LiveStreamItem | null>(null);
@@ -96,15 +97,17 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarLabelPosition: isLandscape ? 'beside-icon' : 'below-icon',
+        tabBarLabelPosition: isDesktopWeb || isLandscape ? 'beside-icon' : 'below-icon',
         tabBarStyle: [
           styles.tabBar,
           {
             backgroundColor: colors.tabBarBg,
-            borderTopColor: colors.tabBarBorder,
-            height: isLandscape ? 48 : 64,
-            paddingBottom: isLandscape ? 4 : 8,
-            paddingTop: isLandscape ? 4 : 6,
+            borderTopColor: isDesktopWeb ? 'transparent' : colors.tabBarBorder,
+            borderBottomColor: isDesktopWeb ? colors.tabBarBorder : 'transparent',
+            borderBottomWidth: isDesktopWeb ? 1 : 0,
+            height: isDesktopWeb ? 64 : isLandscape ? 56 : 72,
+            paddingBottom: isDesktopWeb ? 8 : isLandscape ? 6 : 10,
+            paddingTop: isDesktopWeb ? 8 : isLandscape ? 6 : 8,
           },
         ],
         tabBarActiveTintColor: colors.primary,
@@ -112,8 +115,8 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
         tabBarLabelStyle: [
           styles.tabBarLabel,
           {
-            marginTop: isLandscape ? 0 : 2,
-            marginLeft: isLandscape ? 6 : 0,
+            marginTop: isLandscape || isDesktopWeb ? 0 : 2,
+            marginLeft: isLandscape || isDesktopWeb ? 6 : 0,
           },
         ],
       }}
@@ -129,7 +132,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <Home size={isLandscape ? 18 : 22} color={color} />
+              <Home size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -154,7 +157,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <Compass size={isLandscape ? 18 : 22} color={color} />
+              <Compass size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -178,7 +181,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <Gamepad2 size={isLandscape ? 18 : 22} color={color} />
+              <Gamepad2 size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -197,7 +200,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <Users size={isLandscape ? 18 : 22} color={color} />
+              <Users size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -222,7 +225,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <Heart size={isLandscape ? 18 : 22} color={color} />
+              <Heart size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -246,7 +249,7 @@ export const ConsumerTabNavigator: React.FC<ConsumerTabNavigatorProps> = ({ onOp
                 focused && [styles.tabIconWrapperActive, { backgroundColor: colors.primaryGlow }],
               ]}
             >
-              <User size={isLandscape ? 18 : 22} color={color} />
+              <User size={isDesktopWeb ? 22 : isLandscape ? 20 : 24} color={color} />
             </View>
           ),
         }}
@@ -268,8 +271,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   tabBarLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? 'Inter, Open Sans, sans-serif' : undefined,
   },
   tabIconWrapper: {
     paddingHorizontal: 12,

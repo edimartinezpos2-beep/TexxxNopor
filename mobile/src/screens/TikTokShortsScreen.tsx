@@ -45,8 +45,18 @@ import {
   Monitor,
 } from 'lucide-react-native';
 import { VideoItem, CommentItem } from '../types/auth';
-import { api } from '../services/api';
+import { api, API_BASE_URL } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+
+const resolveShortVideoUri = (video?: VideoItem | null): string => {
+  if (!video) return 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+  let uri = video.videoUrl || video.hlsMasterUrl || '';
+  if (!uri || uri.trim() === '') return 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+  if (uri.startsWith('/')) {
+    uri = `${API_BASE_URL}${uri}`;
+  }
+  return uri;
+};
 
 // Mocks de fallback para videos Shorts en caso de no tener clips en backend
 const FALLBACK_SHORTS: VideoItem[] = [
@@ -438,10 +448,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
             >
               <Video
                 source={{
-                  uri:
-                    currentVideo?.videoUrl ||
-                    currentVideo?.hlsMasterUrl ||
-                    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+                  uri: resolveShortVideoUri(currentVideo),
                 }}
                 style={styles.desktopVideo}
                 resizeMode={ResizeMode.COVER}
@@ -698,10 +705,7 @@ export const TikTokShortsScreen: React.FC<TikTokShortsScreenProps> = ({
         >
           <Video
             source={{
-              uri:
-                currentVideo?.videoUrl ||
-                currentVideo?.hlsMasterUrl ||
-                'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+              uri: resolveShortVideoUri(currentVideo),
             }}
             style={styles.mobileVideo}
             resizeMode={ResizeMode.COVER}

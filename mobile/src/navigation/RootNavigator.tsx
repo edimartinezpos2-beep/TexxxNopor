@@ -18,8 +18,8 @@ export const RootNavigator: React.FC = () => {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#000000" />
-        <ActivityIndicator size="large" color={COLORS?.neonLime || '#CCFF00'} />
+        <StatusBar barStyle="dark-content" backgroundColor="#FAF6F1" />
+        <ActivityIndicator size="large" color={COLORS?.primary || '#8B1E2D'} />
       </View>
     );
   }
@@ -27,7 +27,7 @@ export const RootNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       <View style={styles.rootContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        <StatusBar barStyle="dark-content" backgroundColor="#FAF6F1" />
 
         <View style={styles.screenArea}>
           {isAdmin && adminViewMode === 'ADMIN_PANEL' ? (
@@ -60,14 +60,14 @@ export const RootNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FAF6F1',
   },
   screenArea: {
     flex: 1,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FAF6F1',
     justifyContent: 'center',
     alignItems: 'center',
   },

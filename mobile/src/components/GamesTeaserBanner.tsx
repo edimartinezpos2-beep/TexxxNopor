@@ -74,6 +74,8 @@ export const GamesTeaserBanner: React.FC = () => {
           <Image
             source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop' }}
             style={styles.gameCardImg as any}
+            accessibilityLabel="Imagen de juegos interactivos"
+            accessible
           />
           <View style={styles.gameOverlay} />
           <View style={styles.gameBadge}>
@@ -92,6 +94,8 @@ export const GamesTeaserBanner: React.FC = () => {
           <Image
             source={{ uri: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop' }}
             style={styles.gameCardImg as any}
+            accessibilityLabel="Imagen de estudio de juegos"
+            accessible
           />
           <View style={styles.gameOverlay} />
           <View style={[styles.gameBadge, { backgroundColor: '#FFB800' }]}>
@@ -118,7 +122,7 @@ export const GamesTeaserBanner: React.FC = () => {
       {/* Botón CTA principal */}
       <View style={styles.footerRow}>
         <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: isVip ? colors.primary : '#FF9500' }]}
+          style={[styles.ctaButton, { backgroundColor: isVip ? colors.primary : '#B45309' }]}
           onPress={handleNavigateToGames}
           activeOpacity={0.85}
         >
@@ -129,8 +133,8 @@ export const GamesTeaserBanner: React.FC = () => {
             </>
           ) : (
             <>
-              <Lock size={14} color="#000000" style={{ marginRight: 6 }} />
-              <Text style={[styles.ctaButtonText, { color: '#000000' }]}>
+              <Lock size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.ctaButtonText}>
                 DESBLOQUEAR JUEGOS CON VIP ($15.000 COP)
               </Text>
             </>
@@ -149,11 +153,16 @@ export const GamesTeaserBanner: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 12,
-    marginVertical: 12,
-    borderRadius: 14,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -178,8 +187,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bannerTitle: {
-    fontSize: 14,
+    fontSize: 22,
     fontWeight: '800',
+    lineHeight: 30,
   },
   nutakuBadge: {
     backgroundColor: '#FF9500',
@@ -193,15 +203,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   bannerSubtitle: {
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 16,
+    marginTop: 4,
+    lineHeight: 26,
+    maxWidth: 520,
   },
   seeAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   seeAllText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   contentRow: {
@@ -287,14 +299,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: 52,
+    paddingVertical: 12,
+    borderRadius: 16,
   },
   ctaButtonText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.4,
+    fontSize: 17,
+    fontWeight: '800',
   },
   freeBadge: {
     paddingHorizontal: 8,

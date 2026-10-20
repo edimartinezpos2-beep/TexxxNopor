@@ -16,8 +16,16 @@ import {
 } from 'react-native';
 import { X, Heart, Flame, Sparkles, Send, CheckCircle2, Eye, Plus, Trash2 } from 'lucide-react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { ActorStoryGroup, StorySlide, api } from '../services/api';
+import { ActorStoryGroup, StorySlide, api, API_BASE_URL } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+
+const resolveSafeMediaUrl = (url?: string): string => {
+  if (!url) return '';
+  if (url.startsWith('/')) {
+    return `${API_BASE_URL}${url}`;
+  }
+  return url;
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SLIDE_DURATION_MS = 5000;
@@ -211,7 +219,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         {currentSlide.mediaType === 'VIDEO' ? (
           <Video
             ref={videoRef}
-            source={{ uri: currentSlide.mediaUrl }}
+            source={{ uri: resolveSafeMediaUrl(currentSlide.mediaUrl) }}
             style={StyleSheet.absoluteFillObject}
             resizeMode={ResizeMode.COVER}
             shouldPlay={visible && !isPaused}
@@ -221,7 +229,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           />
         ) : (
           <Image
-            source={{ uri: currentSlide.mediaUrl }}
+            source={{ uri: resolveSafeMediaUrl(currentSlide.mediaUrl) }}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
           />

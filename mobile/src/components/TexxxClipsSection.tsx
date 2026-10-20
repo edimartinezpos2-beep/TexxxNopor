@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   Image,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
-import { Zap, Play, Eye, Flame, ChevronRight } from 'lucide-react-native';
+import { Zap, Play, Eye, Flame, ChevronRight, Heart, Bookmark, MoreHorizontal } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { VideoItem } from '../types/auth';
 import { TikTokShortsScreen } from '../screens/TikTokShortsScreen';
+import { RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '../theme/colors';
 
 interface TexxxClipsSectionProps {
   videos: VideoItem[];
@@ -26,7 +29,7 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
   onOpenLive,
   onViewActor,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [activeShortIndex, setActiveShortIndex] = useState<number | null>(null);
 
   if (!videos || videos.length === 0) return null;
@@ -42,15 +45,18 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
       {/* Cabecera de la sección */}
       <View style={styles.sectionHeader}>
         <View style={styles.titleWithIcon}>
-          <View style={[styles.iconPill, { backgroundColor: 'rgba(255, 45, 85, 0.2)' }]}>
-            <Zap size={14} color="#FF2D55" fill="#FF2D55" />
+          <View style={[styles.iconPill, { backgroundColor: colors.primaryGlow }]}>
+            <Zap size={16} color={colors.primary} />
           </View>
           <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                 TexxxClips
               </Text>
-              <View style={styles.liveBadge}>
+              <View style={[
+                styles.liveBadge,
+                { backgroundColor: colors.primary }
+              ]}>
                 <Text style={styles.liveBadgeText}>SHORTS 9:16</Text>
               </View>
             </View>
@@ -61,31 +67,42 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
         </View>
 
         <TouchableOpacity
-          style={styles.seeAllBtn}
+          style={[
+            styles.seeAllBtn,
+            { 
+              backgroundColor: colors.primary,
+              ...SHADOWS.glow(),
+            }
+          ]}
           onPress={() => setActiveShortIndex(0)}
-          activeOpacity={0.7}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.seeAllText, { color: colors.primary }]}>Ver todo</Text>
-          <ChevronRight size={14} color={colors.primary} />
+          <Text style={styles.seeAllText}>VER TODO</Text>
+          <ChevronRight size={14} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Carrusel Horizontal de Clips Verticales */}
+      {/* Carrusel Horizontal de Clips Verticales Premium */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollList}
+        contentContainerStyle={{ paddingBottom: SPACING.md }}
       >
         {clips.map((item, idx) => {
           const shortDuration = item.duration || `0:${20 + (idx * 7) % 35}`;
+          const satisfactionPercent = Math.min(99, Math.max(88, 90 + ((idx * 5) % 10)));
 
           return (
             <TouchableOpacity
               key={`clip-${item.id}-${idx}`}
-              activeOpacity={0.88}
+              activeOpacity={0.9}
               style={[
                 styles.clipCard,
-                { backgroundColor: colors.surfaceCard, borderColor: colors.border },
+                { 
+                  backgroundColor: colors.surfaceCard,
+                  borderColor: colors.border,
+                }
               ]}
               onPress={() => setActiveShortIndex(idx)}
             >
@@ -96,38 +113,78 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
                     item.thumbnailUrl ||
                     'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop',
                 }}
-                style={styles.clipThumbnail as any}
+                style={styles.clipThumbnail}
                 resizeMode="cover"
+                onError={() => {
+                  if (item.thumbnailUrl && !item.thumbnailUrl.includes('unsplash')) {
+                    (item as any).thumbnailUrl = 'https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?w=500&auto=format&fit=crop';
+                  }
+                }}
               />
 
-              {/* Overlays */}
+              {/* Overlays premium */}
               <View style={styles.clipTopOverlay}>
-                <View style={styles.flamePill}>
-                  <Flame size={10} color="#FF9500" fill="#FF9500" />
-                  <Text style={styles.flamePillText}>HOT</Text>
+                {/* Badge de popularidad */}
+                <View style={[
+                  styles.popularityBadge,
+                  { 
+                    backgroundColor: 'rgba(230, 30, 58, 0.8)',
+                    borderRadius: RADIUS.full,
+                  }
+                ]}>
+                  <Heart size={12} color="#FFFFFF" fill="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.popularityBadgeText}>{satisfactionPercent}%</Text>
                 </View>
-                <View style={styles.durationPill}>
-                  <Text style={styles.durationPillText}>{shortDuration}</Text>
+                
+                {/* Duración */}
+                <View style={[
+                  styles.durationBadge,
+                  { 
+                    backgroundColor: 'rgba(230, 30, 58, 0.8)',
+                    borderRadius: RADIUS.md,
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                  }
+                ]}>
+                  <Text style={styles.durationText}>{shortDuration}</Text>
                 </View>
               </View>
 
-              {/* Botón Central Play translúcido */}
-              <View style={styles.playIconWrapper}>
-                <Play size={18} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
+              {/* Botón Central Play translúcido con efecto glow */}
+              <View style={[
+                styles.playIconWrapper,
+                { 
+                  backgroundColor: 'rgba(230, 30, 58, 0.95)',
+                  ...SHADOWS.glow(),
+                }
+              ]}>
+                <Play size={20} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
               </View>
 
               {/* Gradiente y datos inferiores */}
               <View style={styles.clipBottomOverlay}>
-                <Text style={styles.clipTitle} numberOfLines={2}>
+                <Text style={[
+                  styles.clipTitle,
+                  { 
+                    color: colors.textPrimary,
+                    fontWeight: '600',
+                  }
+                ]} numberOfLines={2}>
                   {item.title}
                 </Text>
 
                 <View style={styles.clipMetaRow}>
-                  <Eye size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
-                  <Text style={styles.clipViewsText}>
+                  <Eye size={10} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                  <Text style={[
+                    styles.clipViewsText,
+                    { 
+                      color: colors.textSecondary,
+                      fontWeight: '600',
+                    }
+                  ]}>
                     {typeof item.views === 'number'
                       ? `${(item.views / 1000).toFixed(0)}k`
-                      : item.views || '12k'}
+                      : item.views || '0'}
                   </Text>
                 </View>
               </View>
@@ -136,20 +193,23 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
         })}
       </ScrollView>
 
-      {/* Modal Reproductor Shorts Pantalla Completa estilo TikTok / YouTube Shorts (Imágenes 1 y 2) */}
+      {/* Modal Reproductor Shorts Pantalla Completa estilo TikTok / YouTube Shorts */}
       {activeShortIndex !== null && (
         <Modal
           visible={true}
           animationType="fade"
           onRequestClose={() => setActiveShortIndex(null)}
+          transparent
         >
-          <TikTokShortsScreen
-            initialVideos={clips}
-            initialIndex={activeShortIndex}
-            onBack={() => setActiveShortIndex(null)}
-            onOpenLive={onOpenLive}
-            onViewActor={onViewActor}
-          />
+          <View style={styles.modalBackground}>
+            <TikTokShortsScreen
+              initialVideos={clips}
+              initialIndex={activeShortIndex}
+              onBack={() => setActiveShortIndex(null)}
+              onOpenLive={onOpenLive}
+              onViewActor={onViewActor}
+            />
+          </View>
         </Modal>
       )}
     </View>
@@ -158,64 +218,75 @@ export const TexxxClipsSection: React.FC<TexxxClipsSectionProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
+    marginVertical: SPACING.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 10,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   titleWithIcon: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.xs,
   },
   iconPill: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...TYPOGRAPHY.headlineMedium,
+    color: colors.textPrimary,
   },
   liveBadge: {
-    backgroundColor: '#FF2D55',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
   },
   liveBadgeText: {
     color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '900',
+    fontSize: TYPOGRAPHY.labelSmall.fontSize,
+    fontWeight: TYPOGRAPHY.labelSmall.fontWeight,
+    letterSpacing: 0.5,
   },
   sectionSubtitle: {
-    fontSize: 11,
-    marginTop: 1,
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
   },
   seeAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.surfaceCardLight,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.md,
   },
   seeAllText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.labelMedium,
+    color: colors.primary,
   },
   scrollList: {
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.md,
   },
   clipCard: {
-    width: 124,
-    height: 200,
-    borderRadius: 12,
+    width: 140,
+    height: 230,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
+    backgroundColor: colors.surfaceCard,
+    ...SHADOWS.card,
     position: 'relative',
   },
   clipThumbnail: {
@@ -224,47 +295,41 @@ const styles = StyleSheet.create({
   },
   clipTopOverlay: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    right: 6,
+    top: SPACING.xs,
+    left: SPACING.xs,
+    right: SPACING.xs,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  flamePill: {
+  popularityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 2,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
   },
-  flamePillText: {
-    color: '#FF9500',
-    fontSize: 8,
-    fontWeight: 'bold',
-  },
-  durationPill: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  durationPillText: {
+  popularityBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: 'bold',
+    fontSize: TYPOGRAPHY.labelSmall.fontSize,
+    fontWeight: TYPOGRAPHY.labelSmall.fontWeight,
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  durationText: {
+    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.labelSmall.fontSize,
+    fontWeight: TYPOGRAPHY.labelSmall.fontWeight,
   },
   playIconWrapper: {
     position: 'absolute',
-    top: '40%',
+    top: '45%',
     left: '50%',
-    transform: [{ translateX: -16 }, { translateY: -16 }],
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    transform: [{ translateX: -24 }, { translateY: -24 }],
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -273,23 +338,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.82)',
+    height: '40%', // 92px de 230px
+    padding: SPACING.md,
+    backgroundColor: 'linear-gradient(to top, rgba(10,8,8,0.9), transparent)',
   },
   clipTitle: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.titleMedium.fontSize,
+    fontWeight: TYPOGRAPHY.titleMedium.fontWeight,
+    lineHeight: 20,
+    marginBottom: SPACING.xs,
   },
   clipMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: SPACING.xs,
   },
   clipViewsText: {
-    color: '#D0D0D0',
-    fontSize: 9,
-    fontWeight: '600',
+    color: '#B8B0A8',
+    fontSize: TYPOGRAPHY.bodySmall.fontSize,
+    fontWeight: TYPOGRAPHY.bodySmall.fontWeight,
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -289,175 +289,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const featuredVideo = displayedVideos.length > 0 ? displayedVideos[0] : null;
 
   const renderVideoItem = ({ item, index }: { item: VideoItem; index: number }) => {
-    // Calculamos un porcentaje simulado de likes basado en las métricas
-    const satisfactionPercent = Math.min(99, Math.max(88, 90 + ((index * 3) % 10)));
-
     return (
-      <View key={item.id}>
-
-        <TouchableOpacity
-          style={[
-            styles.videoCard,
-            { backgroundColor: colors.surfaceCard, borderColor: colors.border },
-          ]}
-          activeOpacity={0.9}
-          onPress={() => onSelectVideo && onSelectVideo(item)}
-        >
-          {/* Thumbnail */}
-          <View style={[styles.thumbnailWrapper, { backgroundColor: colors.surfaceCardLight }]}>
-          <Image
-              source={{
-                uri:
-                  item.thumbnailUrl ||
-                  'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop',
-              }}
-              style={styles.thumbnail as any}
-              resizeMode="cover"
-              onError={() => {
-                // Si la imagen falla (URL rota / 404 de Render), reemplazar con fallback Unsplash
-                if (item.thumbnailUrl && !item.thumbnailUrl.includes('unsplash')) {
-                  (item as any).thumbnailUrl = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
-                }
-              }}
-            />
-
-            {/* Badges superiores (18+ & VERIFICADO & 4K) */}
-            <View style={styles.thumbnailTopBadges}>
-              <View style={{ flexDirection: 'row', gap: 4 }}>
-                <View style={styles.agePill}>
-                  <Text style={styles.agePillText}>18+</Text>
-                </View>
-                <View style={styles.verifiedPill}>
-                  <Text style={styles.verifiedPillText}>VERIFICADO</Text>
-                </View>
-              </View>
-
-              <View style={styles.qualityPill}>
-                <Text style={styles.qualityPillText}>4K</Text>
-              </View>
-            </View>
-
-            {/* Botón Central de Play */}
-            <View style={styles.centerPlayButton}>
-              <Play size={24} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 3 }} />
-            </View>
-
-            {/* Duración y Satisfacción */}
-            <View style={styles.bottomThumbRow}>
-              <View style={styles.ratingBadgePill}>
-                <ThumbsUp size={10} color="#30D158" style={{ marginRight: 3 }} />
-                <Text style={styles.ratingBadgeText}>{satisfactionPercent}%</Text>
-              </View>
-
-              <View style={styles.durationBadge}>
-                <Text style={styles.durationText}>{item.duration || '20:15'}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Metadatos del Video */}
-          <View style={styles.videoInfoRow}>
-            <TouchableOpacity
-              style={styles.creatorAvatarWrapper}
-              onPress={() => onViewActor && onViewActor(item.actorId, item.actorName)}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={{
-                  uri:
-                    item.actorAvatar ||
-                    item.creatorAvatar ||
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-                }}
-                style={styles.creatorAvatar as any}
-              />
-              <View style={styles.creatorAvatarCheck}>
-                <CheckCircle2 size={10} color="#000000" fill={colors.verifiedBlue} />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.titleContainer}>
-              <Text style={[styles.videoTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <View style={styles.creatorNameRow}>
-                <Text style={[styles.creatorName, { color: colors.textSecondary }]}>
-                  {item.actorName || item.creatorName || 'Canal Oficial'}
-                </Text>
-                <CheckCircle2 size={12} color={colors.verifiedBlue} fill={colors.verifiedBlue} />
-                <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold', marginLeft: 4 }}>
-                  • {item.category || 'Para ti'}
-                </Text>
-              </View>
-
-              {/* Vistas y Fecha */}
-              <View style={styles.videoMetaStatsRow}>
-                <Eye size={11} color={colors.textMuted} style={{ marginRight: 4 }} />
-                <Text style={[styles.viewsCountText, { color: colors.textMuted }]}>
-                  {typeof item.views === 'number'
-                    ? `${(item.views / 1000).toFixed(1)}k vistas`
-                    : `${item.views || '15k'} vistas`}
-                </Text>
-                <Text style={[styles.viewsCountText, { color: colors.textMuted }]}> • HD 1080p</Text>
-              </View>
-
-              {/* Tags o Hashtags */}
-              {item.tags && item.tags.length > 0 && (
-                <View style={styles.videoTagsRow}>
-                  {item.tags.slice(0, 3).map((tag, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.miniTagBadge,
-                        { backgroundColor: colors.surfaceCardLight, borderColor: colors.border },
-                      ]}
-                    >
-                      <Text style={[styles.miniTagText, { color: colors.primary }]}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Acciones Rápidas (Like y 3 Puntos) */}
-            <View style={styles.actionsColumn}>
-              <TouchableOpacity
-                style={styles.likeButton}
-                onPress={() => handleToggleLike(item)}
-                activeOpacity={0.7}
-              >
-                <Heart
-                  size={18}
-                  color={item.isLiked ? colors.primary : colors.textMuted}
-                  fill={item.isLiked ? colors.primary : 'transparent'}
-                />
-                <Text
-                  style={[
-                    styles.likeCountText,
-                    { color: colors.textSecondary },
-                    item.isLiked && { color: colors.primary, fontWeight: 'bold' },
-                  ]}
-                >
-                  {item.likesCount > 999
-                    ? `${(item.likesCount / 1000).toFixed(1)}k`
-                    : item.likesCount}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.moreButton}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setSelectedVideoForOptions(item);
-                  setShowOptionsModal(true);
-                }}
-              >
-                <MoreVertical size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <PremiumVideoCard
+        key={item.id}
+        video={item}
+        onPress={() => onSelectVideo && onSelectVideo(item)}
+        onToggleLike={() => handleToggleLike(item)}
+        onToggleSave={() => {
+          // Implement toggle save logic
+          if (!userToken) {
+            setShowAuthModal(true);
+            return;
+          }
+          // For now, we'll just call toggleLike as a placeholder
+          // In a real implementation, this would toggle watch later
+          handleToggleLike(item);
+        }}
+        onMoreOptions={() => {
+          setSelectedVideoForOptions(item);
+          setShowOptionsModal(true);
+        }}
+        onViewActor={onViewActor}
+        isLiked={item.isLiked ?? false}
+        isSaved={item.isSaved ?? false}
+        likesCount={item.likesCount ?? 0}
+        index={index}
+        variant="standard"
+        showSatisfaction={true}
+      />
     );
   };
 
@@ -470,7 +329,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* 1. Header con Logo Oficial y Acciones */}
       <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
-        <BrandLogo size="small" />
+        <BrandLogo size="small" showSubtitle={false} />
 
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -481,8 +340,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             ]}
             onPress={() => setShowSearchBar(!showSearchBar)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={showSearchBar ? 'Cerrar búsqueda' : 'Buscar'}
           >
-            <Search size={16} color={showSearchBar ? '#FFFFFF' : colors.textPrimary} />
+            <Search size={22} color={showSearchBar ? '#FFFFFF' : colors.textPrimary} />
             <Text
               style={[
                 styles.searchButtonText,
@@ -503,8 +364,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               ]}
               onPress={() => setShowNotificationsModal(true)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Avisos"
             >
-              <Bell size={18} color={unreadNotifsCount > 0 ? '#FF2D55' : colors.textPrimary} />
+              <Bell size={22} color={unreadNotifsCount > 0 ? colors.primary : colors.textPrimary} />
+              <Text style={[styles.notifButtonText, { color: colors.textPrimary }]}>Avisos</Text>
               {unreadNotifsCount > 0 && (
                 <View style={styles.notifBadgeCircle}>
                   <Text style={styles.notifBadgeText}>
@@ -518,11 +382,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Botón Descargar APK (En la barra superior al lado del perfil) - Solo visible en versión Web para descargar el APK móvil */}
           {Platform.OS === 'web' && (
             <TouchableOpacity
-              style={styles.downloadHeaderBtn}
+              style={[styles.downloadHeaderBtn, { backgroundColor: colors.primary }]}
               onPress={handleDownloadApk}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Descargar la aplicación"
             >
-              <Download size={13} color="#FFFFFF" />
+              <Download size={20} color="#FFFFFF" />
               <Text style={styles.downloadHeaderBtnText}>Descargar</Text>
             </TouchableOpacity>
           )}
@@ -538,12 +404,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               }
             }}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={user ? 'Abrir mi cuenta' : 'Iniciar sesión'}
           >
             {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={[styles.headerAvatar, { borderColor: colors.primary }] as any} />
+              <Image
+                source={{ uri: user.avatarUrl }}
+                style={[styles.headerAvatar, { borderColor: colors.primary }] as any}
+                accessibilityLabel="Foto de perfil"
+                accessible
+              />
             ) : (
               <View style={[styles.headerAvatar, styles.avatarGuestPlaceholder, { borderColor: colors.border, backgroundColor: colors.surfaceCardLight }]}>
-                <User size={18} color={colors.textSecondary} />
+                <User size={22} color={colors.textSecondary} />
               </View>
             )}
             <View
@@ -560,7 +433,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {showSearchBar && (
         <View style={[styles.searchBarContainer, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View style={[styles.searchInputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Search size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+            <Search size={22} color={colors.textSecondary} style={{ marginRight: 8 }} />
             <TextInput
               style={[styles.searchInput, { color: colors.textPrimary }]}
               placeholder="Buscar videos, actrices, categorías (#amateur, #4k)..."
@@ -568,6 +441,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoFocus
+              accessibilityLabel="Campo de búsqueda"
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -725,9 +599,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         ]}
                         onPress={() => setSelectedCategory(cat.name)}
                         activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Categoría ${cat.name}`}
                       >
                         <IconComp
-                          size={13}
+                          size={18}
                           color={isSelected ? '#FFFFFF' : colors.textPrimary}
                           style={{ marginRight: 5 }}
                         />
@@ -809,72 +685,91 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    minHeight: 72,
+    ...(Platform.OS === 'web'
+      ? ({ position: 'sticky', top: 0, zIndex: 50 } as any)
+      : null),
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
   },
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 6,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 8,
   },
   searchButtonText: {
-    fontSize: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? 'Inter, Open Sans, sans-serif' : undefined,
   },
   downloadHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF2D55',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 5,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    gap: 8,
   },
   downloadHeaderBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
   },
   notifButton: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
     position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   notifBadgeCircle: {
     position: 'absolute',
     top: -3,
     right: -3,
-    backgroundColor: '#FF2D55',
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    backgroundColor: '#8B1E2D',
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
   notifBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   avatarContainer: {
     position: 'relative',
   },
   headerAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1.5,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
   },
   avatarGuestPlaceholder: {
     alignItems: 'center',
@@ -882,88 +777,99 @@ const styles = StyleSheet.create({
   },
   onlineDot: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    backgroundColor: '#30D158',
-    borderWidth: 1.5,
-    borderColor: '#0A0A0E',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#15803D',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   searchBarContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 0.5,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    height: 38,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: 1.5,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
-    paddingVertical: 0,
+    fontSize: 18,
+    lineHeight: 28,
+    paddingVertical: 8,
+    fontFamily: Platform.OS === 'web' ? 'Inter, Open Sans, sans-serif' : undefined,
   },
   listHeaderWrapper: {
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   catalogHeaderBox: {
-    marginTop: 8,
-    marginBottom: 6,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    borderBottomWidth: 0.5,
-    paddingBottom: 10,
+    marginTop: 16,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderBottomWidth: 1,
+    paddingBottom: 16,
   },
   catalogTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 14,
+    gap: 12,
   },
   catalogMainTitle: {
-    fontSize: 16,
+    fontSize: 28,
     fontWeight: '800',
+    lineHeight: 36,
+    fontFamily: Platform.OS === 'web' ? 'Inter, Open Sans, sans-serif' : undefined,
   },
   catalogCountBadge: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '600',
   },
   categoryScroll: {
-    gap: 8,
+    gap: 10,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
   },
   categoryChipText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
   feedList: {
-    paddingBottom: 20,
+    paddingBottom: 32,
   },
   videoCard: {
-    marginHorizontal: 12,
-    marginBottom: 14,
-    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   thumbnailWrapper: {
     width: '100%',
-    height: 200,
+    height: 220,
     position: 'relative',
-    backgroundColor: '#1E1E28',
+    backgroundColor: '#1C1917',
   },
   thumbnail: {
     width: '100%',
@@ -979,52 +885,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   agePill: {
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#FF3B30',
+    backgroundColor: '#8B1E2D',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   agePillText: {
-    color: '#FF3B30',
-    fontSize: 9,
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: 'bold',
   },
   verifiedPill: {
-    backgroundColor: '#0084FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: '#1D4ED8',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   verifiedPillText: {
     color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.4,
+    fontSize: 12,
+    fontWeight: '800',
   },
   qualityPill: {
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#05D9E8',
+    backgroundColor: 'rgba(28,25,23,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   qualityPillText: {
-    color: '#05D9E8',
-    fontSize: 9,
-    fontWeight: '900',
+    color: '#FAF6F1',
+    fontSize: 13,
+    fontWeight: '800',
   },
   centerPlayButton: {
     position: 'absolute',
     top: '40%',
     left: '50%',
-    transform: [{ translateX: -24 }, { translateY: -24 }],
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    transform: [{ translateX: -28 }, { translateY: -28 }],
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(139, 30, 45, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1046,33 +947,33 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   ratingBadgeText: {
-    color: '#30D158',
-    fontSize: 10,
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   durationBadge: {
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: 'rgba(28,25,23,0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   durationText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   videoInfoRow: {
     flexDirection: 'row',
-    padding: 10,
-    gap: 10,
+    padding: 14,
+    gap: 12,
   },
   creatorAvatarWrapper: {
     position: 'relative',
   },
   creatorAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   creatorAvatarCheck: {
     position: 'absolute',
@@ -1085,10 +986,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   videoTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    lineHeight: 18,
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 28,
+    marginBottom: 6,
+    maxWidth: 640,
+    fontFamily: Platform.OS === 'web' ? 'Inter, Open Sans, sans-serif' : undefined,
   },
   creatorNameRow: {
     flexDirection: 'row',
@@ -1097,7 +1000,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   creatorName: {
-    fontSize: 12,
+    fontSize: 16,
   },
   videoMetaStatsRow: {
     flexDirection: 'row',
@@ -1105,7 +1008,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   viewsCountText: {
-    fontSize: 10,
+    fontSize: 15,
   },
   videoTagsRow: {
     flexDirection: 'row',
@@ -1120,7 +1023,7 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
   },
   miniTagText: {
-    fontSize: 9,
+    fontSize: 14,
     fontWeight: '600',
   },
   actionsColumn: {
@@ -1129,14 +1032,20 @@ const styles = StyleSheet.create({
   },
   likeButton: {
     alignItems: 'center',
-    padding: 4,
+    minHeight: 48,
+    minWidth: 48,
+    padding: 8,
   },
   likeCountText: {
-    fontSize: 10,
+    fontSize: 14,
     marginTop: 2,
   },
   moreButton: {
-    padding: 6,
+    minHeight: 44,
+    minWidth: 44,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingContainer: {
     flex: 1,
@@ -1146,7 +1055,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 18,
+    lineHeight: 28,
+    textAlign: 'center',
+    maxWidth: 420,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1155,14 +1067,17 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
+    lineHeight: 32,
+    maxWidth: 520,
   },
   emptySubtitle: {
-    fontSize: 12,
+    fontSize: 18,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 28,
+    maxWidth: 520,
   },
 });

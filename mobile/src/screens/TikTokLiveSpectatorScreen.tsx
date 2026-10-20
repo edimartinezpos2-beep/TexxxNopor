@@ -12,7 +12,9 @@ import {
   Platform,
   Share,
   Modal,
+  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { Video, ResizeMode } from 'expo-av';
 import {
   X,
@@ -260,15 +262,38 @@ export const TikTokLiveSpectatorScreen: React.FC<TikTokLiveSpectatorScreenProps>
   };
 
   // Confirmar recarga de monedas
-  const handleConfirmRecharge = () => {
+  const handleConfirmRecharge = async () => {
     const totalCoinsAdded = selectedPackage.coins + selectedPackage.bonus;
+    const priceNumber = parseInt(selectedPackage.priceCOP.replace(/\./g, ''), 10) || 3500;
+
+    // Abrir pasarela oficial Wompi Bancolombia / Nequi / PSE con precio exacto
+    try {
+      const linkData = await api.wompi.getCheckoutLink(
+        priceNumber,
+        `coins_${selectedPackage.id}`,
+        `COINS-${user?.id?.slice(0, 8) || 'GUEST'}-${Date.now()}`
+      );
+      const targetUrl = linkData?.checkoutUrl || 'https://checkout.wompi.co/l/VPOS_4BlRq7';
+      try {
+        await WebBrowser.openBrowserAsync(targetUrl);
+      } catch (_) {
+        Linking.openURL(targetUrl).catch(() => {});
+      }
+    } catch (_) {
+      try {
+        await WebBrowser.openBrowserAsync('https://checkout.wompi.co/l/VPOS_4BlRq7');
+      } catch (err) {
+        Linking.openURL('https://checkout.wompi.co/l/VPOS_4BlRq7').catch(() => {});
+      }
+    }
+
     setUserCoins((prev) => prev + totalCoinsAdded);
     setRechargeToast(`¡Recarga exitosa! +${totalCoinsAdded} monedas acreditadas.`);
     setShowRechargeModal(false);
     setTimeout(() => setRechargeToast(null), 3500);
 
     if (userToken) {
-      api.live.rechargeCoins?.(userToken, totalCoinsAdded, parseInt(selectedPackage.priceCOP.replace('.', ''), 10)).catch(() => {});
+      api.live.rechargeCoins?.(userToken, totalCoinsAdded, priceNumber).catch(() => {});
     }
   };
 

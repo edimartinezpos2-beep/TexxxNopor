@@ -42,8 +42,8 @@ async function runPasswordRecoveryTests() {
 
     const forgotData = await forgotRes.json();
     console.log(`✓ Solicitud de código exitosa:`, forgotData);
-    if (!forgotData.code || forgotData.code.length !== 6) {
-      throw new Error(`El código generado no tiene 6 dígitos: ${forgotData.code}`);
+    if (!forgotData.code || forgotData.code.length !== 4) {
+      throw new Error(`El código generado no tiene 4 dígitos: ${forgotData.code}`);
     }
     const recoveryCode = forgotData.code;
 
@@ -51,7 +51,7 @@ async function runPasswordRecoveryTests() {
     const invalidCodeRes = await fetch(`http://localhost:${PORT}/api/auth/verify-reset-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: testEmail, code: '000000' }),
+      body: JSON.stringify({ email: testEmail, code: '0000' }),
     });
     console.log(`✓ Verificación de código inválido rechazada con status: ${invalidCodeRes.status}`);
     if (invalidCodeRes.status === 200) {

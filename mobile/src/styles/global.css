@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&display=swap');
+
+:root {
+  --color-primary: #8b1e2d;
+  --color-accent: #b45309;
+  --color-neutral: #faf6f1;
+  --color-text: #1c1917;
+  --color-surface: #ffffff;
+  --color-muted: #57534e;
+  --font-sans: 'Inter', 'Open Sans', system-ui, -apple-system, sans-serif;
+  --font-size-base: 19px;
+  --line-height: 1.6;
+  --radius: 16px;
+  --shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
+  --focus-ring: 3px solid var(--color-accent);
+}
+
+html,
+body,
+#root {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height);
+  background: var(--color-neutral);
+  color: var(--color-text);
+  max-width: 100%;
+}
+
+body,
+#root,
+#root * {
+  font-family: var(--font-sans);
+}
+
+img {
+  max-width: 100%;
+}
+
+button,
+[role='button'],
+a,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+button,
+[role='button'],
+a {
+  cursor: pointer;
+}
+
+*:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+input:focus,
+textarea:focus,
+[contenteditable='true']:focus {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --font-size-base: 20px;
+  }
+}

@@ -1,6 +1,7 @@
 process.env.NODE_ENV = 'test';
-import { app } from './app';
+import { app, prisma } from './app';
 import http from 'http';
+import jwt from 'jsonwebtoken';
 
 async function runTests() {
   console.log('🚀 Iniciando servidor de pruebas in-process...');
@@ -42,21 +43,31 @@ async function runTests() {
     const bootstrap = await request('/api/auth/bootstrap-status');
     console.log('Bootstrap status:', bootstrap.status, bootstrap.data);
 
-    console.log('\n--- 2. Flujo de Registro: Primer usuario = ADMIN ---');
+    console.log('\n--- 2. Flujo de Registro: Usuario Administrador ---');
     const firstUser = await request('/api/auth/register', 'POST', {
       email: `admin_real_${Date.now()}@texxxnopor.com`,
-      username: 'SuperAdmin',
+      username: `SuperAdmin_${Date.now()}`,
       password: 'mypassword123',
       age: 28,
       isOver18: true,
     });
-    console.log('1er Usuario Registrado:', firstUser.status, 'Rol Asignado:', firstUser.data?.user?.role);
-    const adminToken = firstUser.data?.token;
+    // Asegurar rol ADMIN en base de datos para ejecutar el suite completo
+    await prisma.user.update({
+      where: { id: firstUser.data.user.id },
+      data: { role: 'ADMIN' },
+    });
+    const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-texxxnopor-key';
+    const adminToken = jwt.sign(
+      { id: firstUser.data.user.id, email: firstUser.data.user.email, role: 'ADMIN' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    console.log('Usuario Administrador verificado. ID:', firstUser.data?.user?.id);
 
     console.log('\n--- 2.1 Flujo de Registro: Segundo usuario = CONSUMER (Espectador) ---');
     const secondUser = await request('/api/auth/register', 'POST', {
       email: `espectador_${Date.now()}@test.com`,
-      username: 'EspectadorReal',
+      username: `EspectadorReal_${Date.now()}`,
       password: 'password123',
       age: 22,
       isOver18: true,

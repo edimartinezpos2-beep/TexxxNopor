@@ -14,7 +14,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
 
   const isDark = themeMode === 'dark';
   const colors: ThemeColors = isDark ? DARK_THEME : LIGHT_THEME;
@@ -47,9 +47,9 @@ export const useTheme = (): ThemeContextType => {
   if (!context) {
     // Fallback seguro si se usa fuera del Provider
     return {
-      themeMode: 'dark',
-      isDark: true,
-      colors: DARK_THEME,
+      themeMode: 'light',
+      isDark: false,
+      colors: LIGHT_THEME,
       toggleTheme: () => {},
       setThemeMode: () => {},
     };

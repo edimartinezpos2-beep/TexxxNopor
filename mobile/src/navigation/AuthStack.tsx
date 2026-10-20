@@ -1402,17 +1402,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.neonLime,
-    paddingVertical: 13,
-    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    minHeight: 52,
+    paddingVertical: 14,
+    borderRadius: 16,
     marginTop: 6,
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
-    color: '#000000',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   dividerRow: {

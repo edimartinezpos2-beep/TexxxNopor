@@ -73,6 +73,46 @@ if (fs.existsSync(WEB_DIST_PATH)) {
 // Streaming de video de alto rendimiento con soporte de HTTP 206 (Partial Content / Ranges)
 const FALLBACK_IMAGE_CDN = 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop';
 
+const getVideoMimeType = (filename: string): string => {
+  const ext = path.extname(filename).toLowerCase();
+  switch (ext) {
+    case '.mp4':
+    case '.m4v':
+      return 'video/mp4';
+    case '.webm':
+      return 'video/webm';
+    case '.mov':
+      return 'video/quicktime';
+    case '.mkv':
+      return 'video/x-matroska';
+    case '.3gp':
+      return 'video/3gpp';
+    case '.m3u8':
+      return 'application/vnd.apple.mpegurl';
+    case '.ts':
+      return 'video/mp2t';
+    default:
+      return 'video/mp4';
+  }
+};
+
+app.head('/api/stream/video/:filename', (req: Request, res: Response) => {
+  const filePath = path.join(UPLOADS_VIDEOS_DIR, req.params.filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).end();
+  }
+  const stat = fs.statSync(filePath);
+  const mimeType = getVideoMimeType(req.params.filename);
+  res.writeHead(200, {
+    'Content-Length': stat.size,
+    'Content-Type': mimeType,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end();
+});
+
 app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   const filePath = path.join(UPLOADS_VIDEOS_DIR, req.params.filename);
   if (!fs.existsSync(filePath)) {
@@ -86,6 +126,7 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   const stat = fs.statSync(filePath);
   const fileSize = stat.size;
   const range = req.headers.range;
+  const mimeType = getVideoMimeType(req.params.filename);
 
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
@@ -94,27 +135,37 @@ app.get('/api/stream/video/:filename', (req: Request, res: Response) => {
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const MAX_CHUNK = 3 * 1024 * 1024; // 3MB chunk para inicio instantáneo
+    const end = parts[1] ? parseInt(parts[1], 10) : Math.min(fileSize - 1, start + MAX_CHUNK);
     const chunksize = end - start + 1;
     const file = fs.createReadStream(filePath, { start, end });
     const head = {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
       'Access-Control-Allow-Origin': '*',
     };
     res.writeHead(206, head);
+    file.on('error', (err) => {
+      console.warn('[Stream Error]:', err.message);
+    });
     file.pipe(res);
   } else {
     const head = {
       'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType,
       'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
       'Access-Control-Allow-Origin': '*',
     };
     res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
+    const file = fs.createReadStream(filePath);
+    file.on('error', (err) => {
+      console.warn('[Stream Error]:', err.message);
+    });
+    file.pipe(res);
   }
 });
 
@@ -128,7 +179,13 @@ app.use('/uploads/images', (req: Request, res: Response, next: any) => {
     return res.redirect(302, FALLBACK_IMAGE_CDN);
   }
   next();
-}, express.static(UPLOADS_IMAGES_DIR));
+}, express.static(UPLOADS_IMAGES_DIR, {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+  },
+}));
 
 // Videos estáticos (fallback si alguien accede directo a /uploads/videos)
 app.use('/uploads/videos', (req: Request, res: Response, next: any) => {
@@ -142,7 +199,14 @@ app.use('/uploads/videos', (req: Request, res: Response, next: any) => {
     });
   }
   next();
-}, express.static(UPLOADS_VIDEOS_DIR));
+}, express.static(UPLOADS_VIDEOS_DIR, {
+  maxAge: '7d',
+  acceptRanges: true,
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+  },
+}));
 
 // ====================================================
 // RUTAS DIRECTAS DE DESCARGA DE APK INSTALABLE
@@ -1934,14 +1998,24 @@ app.post('/api/user/subscribe-premium', authenticateJWT, async (req: Request, re
       customerEmail,
     } = req.body;
 
-    // Actualizar usuario a verificado / VIP RED
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { isVerified: true },
-    });
+    // Actualizar usuario a verificado / VIP RED y VIP Status
+    const months = plan === '12_months' ? 12 : plan === '6_months' ? 6 : plan === '3_months' ? 3 : 1;
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + months);
 
     const txId = `TX-COP-${Math.floor(10000000 + Math.random() * 90000000)}`;
     const authCode = `AUT-COL-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        isVerified: true,
+        isVip: true,
+        vipExpiresAt: expiresAt,
+        subscriptionPlan: plan || '1_month',
+        lastPaymentRef: txId,
+      },
+    });
     const planAmount = amount || 15000;
     const txCurrency = currency || 'COP';
 
